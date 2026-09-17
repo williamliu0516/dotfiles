@@ -46,7 +46,7 @@ fi
 
 # ── 2. Ghostty ──────────────────────────────────────────────
 if have ghostty; then
-  ok "Ghostty 已安装（$(ghostty --version 2>/dev/null | head -1)）"
+  ok "Ghostty 已安装（$(ghostty --version 2>/dev/null | head -1 || true)）"
 else
   info "安装 Ghostty（从 mkasberg/ghostty-ubuntu 的 .deb）"
   API="https://api.github.com/repos/mkasberg/ghostty-ubuntu/releases/latest"
@@ -62,14 +62,14 @@ else
     curl -fsSL -o "$TMP/ghostty.deb" "$URL"
     $SUDO apt-get install -y -qq "$TMP/ghostty.deb" >/dev/null 2>&1 \
       || { $SUDO dpkg -i "$TMP/ghostty.deb" >/dev/null 2>&1; $SUDO apt-get -f install -y -qq >/dev/null 2>&1; }
-    have ghostty && ok "Ghostty $(ghostty --version 2>/dev/null | head -1)" || die "Ghostty 安装失败"
+    have ghostty && ok "Ghostty $(ghostty --version 2>/dev/null | head -1 || true)" || die "Ghostty 安装失败"
   else
     warn "找不到匹配的 .deb，跳过 Ghostty（其余配置照常安装）"
   fi
 fi
 
 # ── 3. 字体 ─────────────────────────────────────────────────
-if fc-list 2>/dev/null | grep -qi "Maple Mono NF CN"; then
+if fc-list 2>/dev/null | grep -i "Maple Mono NF CN" >/dev/null 2>&1; then
   ok "Maple Mono NF CN 已安装"
 else
   info "安装 Maple Mono NF CN（含中文 + Nerd 图标，约 150MB）"
@@ -79,7 +79,7 @@ else
   unzip -oq "$TMPF/f.zip" -d "$TMPF/x"
   mkdir -p "$HOME/.local/share/fonts/MapleMonoCN"
   for w in Regular Bold Italic BoldItalic; do
-    f="$(ls "$TMPF/x"/*-${w}.ttf 2>/dev/null | head -1)"
+    f="$(ls "$TMPF/x"/*-${w}.ttf 2>/dev/null | head -1 || true)"
     [ -n "$f" ] && cp "$f" "$HOME/.local/share/fonts/MapleMonoCN/"
   done
   rm -rf "$TMPF"
