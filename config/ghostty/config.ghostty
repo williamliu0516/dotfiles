@@ -1,0 +1,48 @@
+# ===== 主题（朋友自制 snappy，跟随系统明暗）=====
+theme = dark:snappy,light:snappy_light
+
+# ===== 字体 =====
+font-family = Maple Mono NF CN
+font-size = 12
+font-thicken = true
+font-feature = +cv01
+font-feature = +cv02
+font-feature = +zero
+
+# 行高 +12%，排版更透气（也更好读）
+adjust-cell-height = 12%
+
+# ===== 可读性（我的改动，非他的配置，见说明）=====
+minimum-contrast = 1.8
+# 暗淡文字（ANSI faint）默认只有 50% 不透明度，抬到 70%
+faint-opacity = 0.7
+
+# ===== 光标 =====
+cursor-style = bar
+cursor-style-blink = false
+adjust-cursor-thickness = 2
+
+# ===== 窗口 =====
+window-decoration = false
+background-opacity = 1.0
+window-padding-x = 10
+window-padding-y = 8
+window-padding-balance = true
+# 内边距用背景色填满，不露出接缝
+window-padding-color = extend
+resize-overlay = never
+
+# ===== 光标拖尾动画（你朋友那个着色器）=====
+custom-shader = shaders/cursor_warp.glsl
+custom-shader-animation = true
+
+# ===== 行为 =====
+shell-integration-features = no-cursor,no-sudo,title
+bell-features = no-system,no-audio,no-attention,no-title,no-border
+clipboard-read = allow
+clipboard-write = allow
+gtk-single-instance = false
+link-url = true
+mouse-hide-while-typing = true
+copy-on-select = clipboard
+scrollback-limit = 100000

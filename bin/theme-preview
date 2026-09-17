@@ -1,0 +1,59 @@
+#!/usr/bin/env python3
+"""在当前终端里用真实 RGB 预览 Ghostty 主题。用法: theme-preview [关键词]"""
+import os,re,sys
+DIRS=[os.path.expanduser('~/.config/ghostty/themes'),'/usr/share/ghostty/themes']
+DIRS=[d for d in DIRS if os.path.isdir(d)]
+def rgb(h): return tuple(int(h[i:i+2],16) for i in (1,3,5))
+def F(h): r,g,b=rgb(h); return f'\x1b[38;2;{r};{g};{b}m'
+def B(h): r,g,b=rgb(h); return f'\x1b[48;2;{r};{g};{b}m'
+R='\x1b[0m'
+def lum(h):
+    c=[x/255 for x in rgb(h)]
+    c=[x/12.92 if x<=0.03928 else ((x+0.055)/1.055)**2.4 for x in c]
+    return .2126*c[0]+.7152*c[1]+.0722*c[2]
+def cr(a,b):
+    l1,l2=sorted([lum(a),lum(b)],reverse=True); return (l1+.05)/(l2+.05)
+def load(n):
+    txt=open(_path(n),encoding='utf-8',errors='ignore').read()
+    bg=re.search(r'^background\s*=\s*#?([0-9a-fA-F]{6})',txt,re.M)
+    fg=re.search(r'^foreground\s*=\s*#?([0-9a-fA-F]{6})',txt,re.M)
+    if not(bg and fg): return None
+    pal={}
+    for m in re.finditer(r'^palette\s*=\s*(\d+)\s*=\s*#?([0-9a-fA-F]{6})',txt,re.M):
+        i=int(m.group(1))
+        if i<16: pal[i]='#'+m.group(2)
+    if len(pal)<16: return None
+    return '#'+bg.group(1),'#'+fg.group(1),pal
+
+kw=sys.argv[1].lower() if len(sys.argv)>1 else None
+rows=[]
+def _path(n):
+    for d in DIRS:
+        if os.path.isfile(os.path.join(d,n)): return os.path.join(d,n)
+    raise FileNotFoundError(n)
+_all=sorted({f for d in DIRS for f in os.listdir(d)})
+for n in _all:
+    if kw and kw not in n.lower(): continue
+    r=load(n)
+    if not r: continue
+    bg,fg,p=r
+    lows=[cr(p[i],bg) for i in range(1,16)]
+    rows.append((n,bg,fg,p,cr(fg,bg),cr(p[8],bg),min(lows)))
+if not kw:
+    rows=[r for r in rows if r[5]>=6 and r[6]>=4.5]     # 只留注释色和最低值都过关的
+    rows.sort(key=lambda r:-min(r[4],r[5],r[6]))
+    rows=rows[:14]
+W=76
+print(f"\n共 {len(rows)} 个主题（注释色≥6:1 且所有色≥4.5:1）\n")
+for n,bg,fg,p,c_fg,c_cm,c_min in rows:
+    print(f"\x1b[1m{n}\x1b[0m   前景 {c_fg:.1f}:1   注释 {c_cm:.1f}:1   最低 {c_min:.1f}:1")
+    L=[f"{F(p[8])}# 注释 / 路径提示 / 补全说明 —— 最容易糊的一档{R}",
+       f"{F(p[4])}~/projects/app{R} {F(p[2])} main{R} {F(p[1])}!2{R} {F(p[3])}?1{R}",
+       f"{F(fg)}$ {F(p[6])}git{R}{F(fg)} commit -m {F(p[3])}\"fix parser\"{R}",
+       f"{F(p[2])}✓ 12 passed{R}  {F(p[1])}✗ 2 failed{R}  {F(p[5])}⚠ 1 skipped{R}",
+       f"{F(p[8])}drwxr-xr-x{R} {F(fg)}src{R}  {F(p[8])}1.2k{R} {F(p[4])}README.md{R}"]
+    for l in L:
+        vis=re.sub(r'\x1b\[[0-9;]*m','',l)
+        print(f"{B(bg)}  {l}{B(bg)}{' '*max(0,W-len(vis)-2)}{R}")
+    print()
+print("换主题: 改 ~/.config/ghostty/config.ghostty 的 theme= 行，然后重启 Ghostty")

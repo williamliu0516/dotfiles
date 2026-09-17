@@ -1,0 +1,134 @@
+# ===== powerlevel10k instant prompt（必须放最顶部）=====
+if [[ -r "${XDG_CACHE_HOME:-$HOME/.cache}/p10k-instant-prompt-${(%):-%n}.zsh" ]]; then
+  source "${XDG_CACHE_HOME:-$HOME/.cache}/p10k-instant-prompt-${(%):-%n}.zsh"
+fi
+
+ZPLUG="$ZDOTDIR/plugins"
+
+# ===== PATH（typeset -U 自动去重）=====
+typeset -U path PATH
+path=("$HOME/.local/bin" $path)
+
+export EDITOR=nvim
+command -v nvim >/dev/null || export EDITOR=vim
+
+# ===== 历史 =====
+HISTFILE="$ZDOTDIR/.zsh_history"
+HISTSIZE=1000000
+SAVEHIST=1000000
+unsetopt SHARE_HISTORY        # 不把别的 pane 的命令串进当前 pane
+setopt APPEND_HISTORY
+setopt INC_APPEND_HISTORY     # 敲一条写一条，不等 shell 退出
+setopt HIST_FCNTL_LOCK        # 文件锁，并发 shell 不互相覆盖
+setopt HIST_SAVE_NO_DUPS
+setopt HIST_FIND_NO_DUPS
+setopt HIST_REDUCE_BLANKS
+setopt EXTENDED_HISTORY
+
+setopt AUTO_CD                # 直接敲目录名就能进去
+setopt INTERACTIVE_COMMENTS
+
+# ===== 命名目录：cd ~cf 进 ~/.config，提示符也会反向缩写 =====
+hash -d cf=$HOME/.config
+hash -d dl=$HOME/Downloads
+hash -d doc=$HOME/Documents
+hash -d sc=$HOME/.local/bin
+
+# ===== 补全 =====
+autoload -Uz compinit
+compinit -d "$ZDOTDIR/.zcompdump" -C
+zmodload zsh/complist
+_comp_options+=(globdots)
+zstyle ':completion:*' matcher-list '' 'm:{a-zA-Z}={A-Za-z}' 'r:|[._-]=* r:|=*'
+zstyle ':completion:*' menu select
+zstyle ':completion:*' list-colors "${(s.:.)LS_COLORS}"
+zstyle ':completion:*:descriptions' format '[%d]'
+
+# ===== 插件 =====
+# 自动建议的灰字颜色：明显暗于正文，一眼看出是建议而非已输入
+ZSH_AUTOSUGGEST_HIGHLIGHT_STYLE='fg=#4a5169'
+source "$ZPLUG/zsh-autosuggestions/zsh-autosuggestions.zsh"
+source "$ZPLUG/fast-syntax-highlighting/fast-syntax-highlighting.plugin.zsh"
+source "$ZPLUG/zsh-history-substring-search/zsh-history-substring-search.zsh"
+
+# 上下箭头：按已输入的前缀筛历史
+HISTORY_SUBSTRING_SEARCH_ENSURE_UNIQUE=1
+bindkey '^[[A' history-substring-search-up
+bindkey '^[[B' history-substring-search-down
+bindkey '^[OA' history-substring-search-up
+bindkey '^[OB' history-substring-search-down
+
+bindkey '^[[1;5C' forward-word         # Ctrl+→
+bindkey '^[[1;5D' backward-word        # Ctrl+←
+bindkey '^H'  backward-kill-word       # Ctrl+Backspace
+bindkey '^[[3~' delete-char
+
+# ===== fzf：Ctrl+R 模糊搜历史，Ctrl+T 选文件 =====
+if command -v fzf >/dev/null; then
+  export FZF_DEFAULT_OPTS="--reverse --height=40% --border=rounded \
+    --color=bg+:#283457,fg+:#c0caf5,hl:#7aa2f7,hl+:#7dcfff,prompt:#7aa2f7,pointer:#bb9af7,info:#565f89"
+  if fzf --zsh >/dev/null 2>&1; then
+    source <(fzf --zsh)
+  else
+    [ -f /usr/share/doc/fzf/examples/key-bindings.zsh ] && source /usr/share/doc/fzf/examples/key-bindings.zsh
+    [ -f /usr/share/doc/fzf/examples/completion.zsh ] && source /usr/share/doc/fzf/examples/completion.zsh
+  fi
+fi
+
+# ===== Tab：有灰字建议就接受，否则正常补全 =====
+# 必须放在 fzf 之后 —— fzf 的 completion.zsh 会抢占 ^I
+_tab_accept_or_complete() {
+  if [[ -n "$POSTDISPLAY" ]]; then
+    zle autosuggest-accept
+  elif (( $+widgets[fzf-completion] )); then
+    zle fzf-completion
+  else
+    zle expand-or-complete
+  fi
+}
+zle -N _tab_accept_or_complete
+bindkey '^I' _tab_accept_or_complete
+bindkey '^[[Z' reverse-menu-complete    # Shift+Tab 反向选菜单
+
+# ===== zoxide：z 按访问频率跳转 =====
+command -v zoxide >/dev/null && eval "$(zoxide init zsh)"
+
+# ===== 别名 =====
+if command -v eza >/dev/null; then
+  alias ls='eza --icons=always --group-directories-first'
+  alias ll='eza --long --git --icons=always --group-directories-first --sort=modified --reverse'
+  alias la='eza --long --all --git --icons=always --group-directories-first'
+  alias lt='eza --tree --level=2 --icons=always'
+else
+  alias ls='ls --color=auto'
+  alias ll='ls -alF'
+  alias la='ls -A'
+fi
+command -v batcat >/dev/null && alias bat='batcat' && alias cat='batcat --paging=never'
+alias l='ls'
+alias grep='grep --color=auto'
+alias diff='diff --color=auto'
+alias cp='cp -iv'
+alias mv='mv -i'
+alias mkd='mkdir -pv'
+alias o='xdg-open'
+alias cf='cd ~/.config && ls'
+alias ..='cd ..'
+alias ...='cd ../..'
+alias gs='git status'
+alias gd='git diff'
+alias gl='git log --oneline --graph --decorate -20'
+alias tk='tmux kill-server'
+
+# ===== micromamba =====
+export MAMBA_EXE="$HOME/.local/bin/micromamba"
+export MAMBA_ROOT_PREFIX="$HOME/micromamba"
+if [ -x "$MAMBA_EXE" ]; then
+  __mamba_setup="$("$MAMBA_EXE" shell hook --shell zsh --root-prefix "$MAMBA_ROOT_PREFIX" 2>/dev/null)"
+  if [ $? -eq 0 ]; then eval "$__mamba_setup"; else alias micromamba="$MAMBA_EXE"; fi
+  unset __mamba_setup
+fi
+
+# ===== 提示符 =====
+source "$ZPLUG/powerlevel10k/powerlevel10k.zsh-theme"
+[[ -f "$ZDOTDIR/.p10k.zsh" ]] && source "$ZDOTDIR/.p10k.zsh"
