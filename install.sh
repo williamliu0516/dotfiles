@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Ghostty + tmux + zsh 终端环境一键安装
-#   curl -fsSL https://raw.githubusercontent.com/williamliu0516/dotfiles/main/install.sh | bash
+#   curl -fsSL https://xiaweiliu.com/dotfiles/install.sh | bash
+#   （备用）curl -fsSL https://raw.githubusercontent.com/williamliu0516/dotfiles/main/install.sh | bash
 set -euo pipefail
 
 REPO_URL="${DOTFILES_REPO:-https://github.com/williamliu0516/dotfiles.git}"

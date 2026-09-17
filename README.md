@@ -3,10 +3,14 @@
 Terminal setup: **Ghostty + tmux + zsh**. One command on a fresh machine.
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/williamliu0516/dotfiles/main/install.sh | bash
+curl -fsSL https://xiaweiliu.com/dotfiles/install.sh | bash
 ```
 
-Installs Ghostty itself if it isn't already there.
+Installs Ghostty itself if it isn't already there. Same script straight from GitHub, if the site is ever down:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/williamliu0516/dotfiles/main/install.sh | bash
+```
 
 ---
 
@@ -48,6 +52,7 @@ bin/
   tmux/claude-state.sh Claude Code hook → tmux window colour
   tmux/save-pane.sh    dump the current pane's scrollback to a file
 install.sh
+index.html           the page at xiaweiliu.com/dotfiles
 ```
 
 Everything is symlinked from `~/.dotfiles`, so edits in the repo are live. Existing files are backed up as `<name>.bak.<timestamp>` before being replaced.
