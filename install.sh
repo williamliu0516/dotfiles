@@ -125,7 +125,11 @@ link() {
   fi
   ln -sfn "$src" "$dst"; ok "$(echo "$dst" | sed "s|$HOME|~|")"
 }
-printf 'export ZDOTDIR="$HOME/.config/zsh"\n' > "$HOME/.zshenv"
+ZSHENV_LINE='export ZDOTDIR="$HOME/.config/zsh"'
+if [ -e "$HOME/.zshenv" ] && ! grep -qxF "$ZSHENV_LINE" "$HOME/.zshenv"; then
+  cp "$HOME/.zshenv" "$HOME/.zshenv.bak.$(date +%Y%m%d%H%M%S)"; warn "已备份原有 .zshenv"
+fi
+grep -qxF "$ZSHENV_LINE" "$HOME/.zshenv" 2>/dev/null || echo "$ZSHENV_LINE" >> "$HOME/.zshenv"
 link "$DOTFILES/config/zsh/zshrc"                 "$HOME/.config/zsh/.zshrc"
 [ -f "$DOTFILES/config/zsh/p10k.zsh" ] && \
 link "$DOTFILES/config/zsh/p10k.zsh"              "$HOME/.config/zsh/.p10k.zsh"
