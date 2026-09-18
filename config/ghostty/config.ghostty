@@ -25,8 +25,8 @@ adjust-cursor-thickness = 2
 # ===== 窗口 =====
 window-decoration = false
 background-opacity = 1.0
-window-padding-x = 10
-window-padding-y = 8
+window-padding-x = 16
+window-padding-y = 12
 window-padding-balance = true
 # 内边距用背景色填满，不露出接缝
 window-padding-color = extend
