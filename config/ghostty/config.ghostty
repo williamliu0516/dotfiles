@@ -24,7 +24,17 @@ adjust-cursor-thickness = 2
 
 # ===== 窗口 =====
 window-decoration = false
-background-opacity = 1.0
+background-opacity = 0.85
+
+# ===== 背景图 =====
+# 用 Ubuntu 自带壁纸：所有 24.04 机器同一路径，不用把图片提交进（公开）仓库。
+# 图片不存在时 Ghostty 会直接忽略，不会报错。
+background-image = /usr/share/backgrounds/Fuji_san_by_amaral.png
+background-image-fit = cover
+background-image-position = center
+# 图片先和背景色按 25% 混合再显示。算过：正文在图最亮处仍有 7:1。
+# 调高会更显图，但文字对比度会掉（0.4 时最亮处只剩 5:1）。
+background-image-opacity = 0.25
 window-padding-x = 10
 window-padding-y = 8
 window-padding-balance = true
