@@ -32,6 +32,7 @@
   # The list of segments shown on the left. Fill it with the most important segments.
   typeset -g POWERLEVEL9K_LEFT_PROMPT_ELEMENTS=(
     # =========================[ Line #1 ]=========================
+    robo                    # robo shell profile (user-defined, see prompt_robo below)
     os_icon                 # os identifier
     dir                     # current directory
     vcs                     # git status
@@ -1656,6 +1657,13 @@
   # Type `p10k help segment` for documentation and a more sophisticated example.
   function prompt_example() {
     p10k segment -f 2 -i '⭐' -t 'hello, %n'
+  }
+
+  # robo shell 会在 precmd 里给 PROMPT 加 [robo:<profile>] 前缀，但 p10k 随后整段重画
+  # PROMPT 把它盖掉，所以在这里自己画。profile 取值和 robo 的 __robo_prompt_prefix 一致。
+  function prompt_robo() {
+    [[ -n $ROBO_NIX_PROMPT_PREFIX ]] || return
+    p10k segment -f 6 -t "robo:${ROBO_NIX_PROFILE_SELECTOR:-${ROBO_NIX_PROFILE:-default}}"
   }
 
   # User-defined prompt segments may optionally provide an instant_prompt_* function. Its job
