@@ -62,5 +62,5 @@ case "$status" in
 esac
 
 out="#[fg=$color]$icon $pct%"
-[ -n "$mins" ] && [ "$mins" -gt 0 ] && out+="#[fg=colour8] $(fmt "$mins")"
-printf '%s #[fg=colour0]│ ' "$out"
+[ -n "$mins" ] && [ "$mins" -gt 0 ] && out+="#[fg=colour7] $(fmt "$mins")"
+printf '%s #[fg=colour8]│ ' "$out"
