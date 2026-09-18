@@ -43,8 +43,10 @@ window-padding-color = extend
 resize-overlay = never
 
 # ===== 光标拖尾动画（你朋友那个着色器）=====
-custom-shader = shaders/cursor_warp.glsl
-custom-shader-animation = true
+# 已关闭：着色器要求窗口在前台时持续跑动画循环，实测空闲占 18% 单核 CPU，关掉后为 0%。
+# custom-shader-animation = false 也不行：拖尾会停在半路变成残影。要拖尾就得付这份电。
+# custom-shader = shaders/cursor_warp.glsl
+# custom-shader-animation = true
 
 # ===== 行为 =====
 shell-integration-features = no-cursor,no-sudo,title
