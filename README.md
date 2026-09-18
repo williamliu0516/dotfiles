@@ -37,6 +37,8 @@ Window numbers are colour-coded by Claude Code state — cyan running, yellow ne
 
 Sessions auto-save every 15 minutes and restore on start (tmux-resurrect + continuum).
 
+The status bar shows battery level with time to empty, or time to full while charging. On a desktop with no battery the segment disappears entirely.
+
 ---
 
 ## Layout
@@ -51,6 +53,7 @@ bin/
   tmux/cheatsheet.sh   the Ctrl+b ? popup
   tmux/claude-state.sh Claude Code hook → tmux window colour
   tmux/save-pane.sh    dump the current pane's scrollback to a file
+  tmux/battery.sh      battery segment for the status bar
 install.sh
 index.html           the page at xiaweiliu.com/dotfiles
 ```
