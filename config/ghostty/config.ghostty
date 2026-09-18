@@ -37,6 +37,9 @@ window-padding-balance = true
 # 内边距用背景色填满，不露出接缝
 window-padding-color = extend
 resize-overlay = never
+# Ctrl+Enter 默认是全屏；GNOME 全屏时不再合成背后的内容，毛玻璃会消失。
+# 改成最大化：配合 Hide Top Bar 的智能隐藏，效果接近全屏且保留模糊。
+keybind = ctrl+enter=toggle_maximize
 
 # ===== 光标拖尾动画（你朋友那个着色器）=====
 # 已关闭：着色器要求窗口在前台时持续跑动画循环，实测空闲占 18% 单核 CPU，关掉后为 0%。
