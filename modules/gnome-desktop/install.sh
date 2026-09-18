@@ -81,7 +81,7 @@ ok "主题、图标、扩展设置"
 # 按选择器改而不是按行号改，主题更新后行号变了也能改对；重装主题会覆盖，重跑本模块即可。
 CSS="$HOME/.themes/$THEME/gnome-shell/gnome-shell.css"
 [ -f "$CSS.orig" ] || cp "$CSS" "$CSS.orig"
-python3 - "$CSS" <<'PY' && ok "顶栏已透明、Dock 已调浅（原文件：gnome-shell.css.orig）" || warn "没找到要改的样式，主题结构可能变了，跳过"
+python3 - "$CSS" <<'PY' && ok "顶栏已透明、字体加粗加大，Dock 已调浅（原文件：gnome-shell.css.orig）" || warn "没找到要改的样式，主题结构可能变了，跳过"
 import re, sys
 path = sys.argv[1]
 css = open(path).read()
@@ -95,6 +95,10 @@ for sel, prop, color in rules:
     css, n = block.subn(lambda m: m.group(1) + color + ";", css, count=1)
     if n == 0:
         sys.exit(f"missing {sel} {{ {prop} }}")
+# 顶栏字体加粗加大：追加在末尾覆盖原规则，带标记防止重跑时重复追加
+MARK = "/* dotfiles: panel font */"
+if MARK not in css:
+    css += "\n" + MARK + "\n#panel .panel-button {\n  font-weight: 800;\n  font-size: 10.5pt;\n}\n"
 open(path, "w").write(css)
 PY
 # 让 GNOME 重新读主题（切走再切回）
