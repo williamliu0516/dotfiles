@@ -18,7 +18,7 @@ curl -fsSL https://raw.githubusercontent.com/williamliu0516/dotfiles/main/instal
 
 | | |
 |---|---|
-| **Terminal** | Ghostty — `snappy` theme (dark/light, follows the system), Maple Mono NF CN, cursor-trail shader (off — it keeps a core 18% busy while idle), semi-transparent with a dimmed background image |
+| **Terminal** | Ghostty — `snappy` theme (dark/light, follows the system), Maple Mono NF CN, cursor-trail shader (off — it keeps a core 18% busy while idle), semi-transparent with a frosted-glass blur of the real desktop (via Blur my Shell on GNOME) |
 | **Shell** | zsh + powerlevel10k, autosuggestions, fast-syntax-highlighting, history prefix search |
 | **Multiplexer** | tmux — one menu key instead of a wall of shortcuts, sessions survive reboot |
 | **Tools** | eza, bat, zoxide, fzf |

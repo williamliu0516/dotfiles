@@ -166,7 +166,25 @@ json.dump(d,open(p,"w"),indent=2,ensure_ascii=False)
 PY
 fi
 
-# ── 9. 默认 shell ───────────────────────────────────────────
+# ── 9. Ghostty 毛玻璃（可选，仅在装了 Blur my Shell 时）─────
+# GNOME 不支持 Ghostty 自己的 background-blur，只能让 Blur my Shell 模糊它背后。
+# 没装这个扩展就跳过，Ghostty 仍是纯半透明。
+BMS_SCHEMAS=""
+for d in "$HOME/.local/share/gnome-shell/extensions/blur-my-shell@aunetx" \
+         /usr/share/gnome-shell/extensions/blur-my-shell@aunetx; do
+  [ -d "$d/schemas" ] && { BMS_SCHEMAS="$d/schemas"; break; }
+done
+if [ -n "$BMS_SCHEMAS" ] && have gsettings; then
+  info "Blur my Shell：模糊 Ghostty 窗口背后"
+  bms_get() { gsettings --schemadir "$BMS_SCHEMAS" get org.gnome.shell.extensions.blur-my-shell.applications "$1"; }
+  bms_set() { gsettings --schemadir "$BMS_SCHEMAS" set org.gnome.shell.extensions.blur-my-shell.applications "$1" "$2"; }
+  # 白名单是追加，不覆盖已有条目
+  wl=$(python3 -c "import ast,sys; l=ast.literal_eval(sys.argv[1].replace('@as ','')); a='com.mitchellh.ghostty'; print(l if a in l else l+[a])" "$(bms_get whitelist)")
+  { bms_set whitelist "$wl" && bms_set opacity 255 && bms_set dynamic-opacity false && bms_set blur true; } \
+    && ok "已开启（只对 Ghostty）" || warn "Blur my Shell 设置失败，跳过"
+fi
+
+# ── 10. 默认 shell ──────────────────────────────────────────
 ZSH_BIN="$(command -v zsh)"
 if [ "$(getent passwd "$USER" | cut -d: -f7)" != "$ZSH_BIN" ]; then
   info "把登录 shell 改成 zsh"

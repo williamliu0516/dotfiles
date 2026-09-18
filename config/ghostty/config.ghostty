@@ -24,17 +24,13 @@ adjust-cursor-thickness = 2
 
 # ===== 窗口 =====
 window-decoration = false
-background-opacity = 0.85
+# 半透明 + 毛玻璃：透出的是真实的桌面，而不是一张贴上去的图。
+# GNOME 不支持 Ghostty 自己的 background-blur，模糊由 Blur my Shell 的应用窗口模糊提供
+# （只对 Ghostty 开，install.sh 会配置）；没装它时就是纯半透明。
+# 0.75 时正文在最坏情况（背后是白色窗口）仍有 4.9:1，背后是壁纸时 9.1:1。
+# 开销实测：终端持续输出时 gnome-shell 多占约 2–5% 单核；画面静止时按设计不重算（这点没单独测）。
+background-opacity = 0.75
 
-# ===== 背景图 =====
-# 用 Ubuntu 自带壁纸：所有 24.04 机器同一路径，不用把图片提交进（公开）仓库。
-# 图片不存在时 Ghostty 会直接忽略，不会报错。
-background-image = /usr/share/backgrounds/Fuji_san_by_amaral.png
-background-image-fit = cover
-background-image-position = center
-# 图片先和背景色按 25% 混合再显示。算过：正文在图最亮处仍有 7:1。
-# 调高会更显图，但文字对比度会掉（0.4 时最亮处只剩 5:1）。
-background-image-opacity = 0.25
 window-padding-x = 10
 window-padding-y = 8
 window-padding-balance = true
