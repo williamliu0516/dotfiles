@@ -1,201 +1,194 @@
 #!/usr/bin/env bash
-# Ghostty + tmux + zsh 终端环境一键安装
+# dotfiles 安装入口：选要装的模块，依次执行 modules/<名字>/install.sh
 #   curl -fsSL https://xiaweiliu.com/dotfiles/install.sh | bash
 #   （备用）curl -fsSL https://raw.githubusercontent.com/williamliu0516/dotfiles/main/install.sh | bash
+#
+#   bash install.sh                        交互菜单
+#   bash install.sh --only terminal,claude-tmux
+#   bash install.sh --all                  本系统能装的全部
+#   bash install.sh --list                 列出模块
+#
+# 必须兼容 macOS 自带的 bash 3.2：不用关联数组、mapfile、${var,,}。
 set -euo pipefail
 
 REPO_URL="${DOTFILES_REPO:-https://github.com/williamliu0516/dotfiles.git}"
 DOTFILES="${DOTFILES_DIR:-$HOME/.dotfiles}"
-FONT_VER="${MAPLE_FONT_VERSION:-v7.9}"
+export DOTFILES_DIR="$DOTFILES"
 
-bold()  { printf '\033[1m%s\033[0m\n' "$*"; }
-info()  { printf '\033[38;5;111m▎\033[0m %s\n' "$*"; }
-ok()    { printf '\033[38;5;77m  ✓\033[0m %s\n' "$*"; }
-warn()  { printf '\033[38;5;215m  !\033[0m %s\n' "$*"; }
-die()   { printf '\033[38;5;203m  ✗\033[0m %s\n' "$*" >&2; exit 1; }
-have()  { command -v "$1" >/dev/null 2>&1; }
+# 模块的显示和执行顺序；不在这里的新模块排在最后
+ORDER="terminal claude-tmux claude-statusline keyboard-display gnome-desktop"
 
-# ── 环境检查 ────────────────────────────────────────────────
-[ "$(uname -s)" = "Linux" ] || die "目前只支持 Linux（macOS 请用 brew 装 ghostty 后手动 stow）"
-have apt-get || die "目前只支持 Debian/Ubuntu 系（apt）"
-[ "$(id -u)" -ne 0 ] || die "请用普通用户运行，需要时脚本会自己调 sudo"
+# 仓库还没拉下来之前，lib/common.sh 不可用，先用最小的一套输出函数
+bold() { printf '\033[1m%s\033[0m\n' "$*"; }
+info() { printf '\033[38;5;111m▎\033[0m %s\n' "$*"; }
+ok()   { printf '\033[38;5;77m  ✓\033[0m %s\n' "$*"; }
+warn() { printf '\033[38;5;215m  !\033[0m %s\n' "$*"; }
+die()  { printf '\033[38;5;203m  ✗\033[0m %s\n' "$*" >&2; exit 1; }
+have() { command -v "$1" >/dev/null 2>&1; }
 
-SUDO=""
-if [ "$(id -u)" -ne 0 ]; then have sudo || die "需要 sudo"; SUDO="sudo"; fi
+usage() { sed -n '2,10p' "$0" 2>/dev/null | sed 's/^# \{0,1\}//'; exit 0; }
 
-. /etc/os-release
-ARCH="$(dpkg --print-architecture)"
-bold "Ghostty + tmux + zsh 环境安装"
-info "系统 $PRETTY_NAME  架构 $ARCH"
-
-# ── 1. 系统包 ───────────────────────────────────────────────
-info "安装系统包"
-PKGS=(zsh tmux git curl unzip fontconfig fzf eza bat zoxide ca-certificates)
-MISSING=()
-for p in "${PKGS[@]}"; do
-  dpkg -s "$p" >/dev/null 2>&1 || MISSING+=("$p")
+MODE=menu ONLY=""
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --all)    MODE=all ;;
+    --only)   MODE=only; ONLY="${2:-}"; shift ;;
+    --only=*) MODE=only; ONLY="${1#--only=}" ;;
+    --list)   MODE=list ;;
+    -h|--help) usage ;;
+    *) die "不认识的参数：$1（--help 看用法）" ;;
+  esac
+  shift
 done
-if [ ${#MISSING[@]} -gt 0 ]; then
-  $SUDO apt-get update -qq
-  # eza/zoxide 在旧版 Ubuntu 可能没有，逐个装，失败不中断
-  for p in "${MISSING[@]}"; do
-    $SUDO apt-get install -y -qq "$p" >/dev/null 2>&1 && ok "$p" || warn "$p 装不上（源里没有），跳过"
-  done
-else
-  ok "系统包已齐"
-fi
 
-# ── 2. Ghostty ──────────────────────────────────────────────
-if have ghostty; then
-  ok "Ghostty 已安装（$(ghostty --version 2>/dev/null | head -1 || true)）"
-else
-  info "安装 Ghostty（从 mkasberg/ghostty-ubuntu 的 .deb）"
-  API="https://api.github.com/repos/mkasberg/ghostty-ubuntu/releases/latest"
-  # 优先精确匹配本机发行版号，否则退回该架构下最新的一个
-  URL="$(curl -fsSL "$API" \
-        | grep -o "https://[^\"]*ghostty_[^\"]*_${ARCH}_${VERSION_ID}\.deb" | head -1 || true)"
-  if [ -z "$URL" ]; then
-    URL="$(curl -fsSL "$API" | grep -o "https://[^\"]*ghostty_[^\"]*_${ARCH}_[^\"]*\.deb" | head -1 || true)"
-    [ -n "$URL" ] && warn "没有 $VERSION_ID 的构建，改用 $(basename "$URL")"
-  fi
-  if [ -n "$URL" ]; then
-    TMP="$(mktemp -d)"; trap 'rm -rf "$TMP"' EXIT
-    curl -fsSL -o "$TMP/ghostty.deb" "$URL"
-    $SUDO apt-get install -y -qq "$TMP/ghostty.deb" >/dev/null 2>&1 \
-      || { $SUDO dpkg -i "$TMP/ghostty.deb" >/dev/null 2>&1; $SUDO apt-get -f install -y -qq >/dev/null 2>&1; }
-    have ghostty && ok "Ghostty $(ghostty --version 2>/dev/null | head -1 || true)" || die "Ghostty 安装失败"
-  else
-    warn "找不到匹配的 .deb，跳过 Ghostty（其余配置照常安装）"
-  fi
-fi
+# ── 系统检查 ────────────────────────────────────────────────
+[ "$(id -u)" -ne 0 ] || die "请用普通用户运行，需要时脚本会自己调 sudo"
+case "$(uname -s)" in
+  Linux)
+    have apt-get || die "Linux 目前只支持 Debian/Ubuntu 系（apt）"
+    have sudo || die "需要 sudo"
+    have git || { info "安装 git"; sudo apt-get update -qq; sudo apt-get install -y -qq git curl >/dev/null; }
+    ;;
+  Darwin)
+    # Apple Silicon 上新开的 shell 里 brew 可能还不在 PATH
+    for b in /opt/homebrew/bin/brew /usr/local/bin/brew; do
+      if ! have brew && [ -x "$b" ]; then eval "$("$b" shellenv)"; fi
+    done
+    have brew || die "需要 Homebrew。先装它再重跑本脚本：
+    /bin/bash -c \"\$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)\""
+    xcode-select -p >/dev/null 2>&1 || die "需要 Xcode 命令行工具（里面有 git）：先运行 xcode-select --install，装完重跑"
+    ;;
+  *) die "只支持 Linux（Debian/Ubuntu）和 macOS" ;;
+esac
 
-# ── 3. 字体 ─────────────────────────────────────────────────
-if fc-list 2>/dev/null | grep -i "Maple Mono NF CN" >/dev/null 2>&1; then
-  ok "Maple Mono NF CN 已安装"
-else
-  info "安装 Maple Mono NF CN（含中文 + Nerd 图标，约 150MB）"
-  TMPF="$(mktemp -d)"
-  curl -fsSL -o "$TMPF/f.zip" \
-    "https://github.com/subframe7536/maple-font/releases/download/${FONT_VER}/MapleMono-NF-CN.zip"
-  unzip -oq "$TMPF/f.zip" -d "$TMPF/x"
-  mkdir -p "$HOME/.local/share/fonts/MapleMonoCN"
-  for w in Regular Bold Italic BoldItalic; do
-    f="$(ls "$TMPF/x"/*-${w}.ttf 2>/dev/null | head -1 || true)"
-    [ -n "$f" ] && cp "$f" "$HOME/.local/share/fonts/MapleMonoCN/"
-  done
-  rm -rf "$TMPF"
-  fc-cache -f "$HOME/.local/share/fonts" >/dev/null 2>&1
-  ok "字体已安装"
-fi
-
-# ── 4. 拉仓库 ───────────────────────────────────────────────
+# ── 拉仓库 ──────────────────────────────────────────────────
 if [ -d "$DOTFILES/.git" ]; then
-  info "更新 dotfiles"; git -C "$DOTFILES" pull --ff-only -q || warn "pull 失败，用现有版本"
+  git -C "$DOTFILES" pull --ff-only -q 2>/dev/null || warn "dotfiles 没能更新，用现有版本"
 else
   info "克隆 dotfiles → $DOTFILES"; git clone -q --depth 1 "$REPO_URL" "$DOTFILES"
 fi
-ok "$DOTFILES"
+. "$DOTFILES/lib/common.sh"
 
-# ── 5. zsh 插件 ─────────────────────────────────────────────
-info "安装 zsh 插件"
-ZP="$HOME/.config/zsh/plugins"; mkdir -p "$ZP"
-clone_plugin() {
-  local url=$1 name=$2
-  if [ -d "$ZP/$name/.git" ]; then git -C "$ZP/$name" pull -q --ff-only 2>/dev/null || true
-  else git clone -q --depth 1 "$url" "$ZP/$name"; fi
-  ok "$name"
+# ── 发现模块 ────────────────────────────────────────────────
+# 每个模块在 install.sh 开头用注释声明 name / desc / os / needs
+meta() { sed -n "s/^# $2: *//p" "$DOTFILES/modules/$1/install.sh" | head -1; }
+
+supported() {  # 本机能不能装这个模块
+  local tag
+  for tag in $(meta "$1" os); do
+    [ "$tag" = "$OS" ] && return 0
+    [ "$tag" = gnome ] && is_gnome && return 0
+  done
+  return 1
 }
-clone_plugin https://github.com/zsh-users/zsh-autosuggestions            zsh-autosuggestions
-clone_plugin https://github.com/zdharma-continuum/fast-syntax-highlighting fast-syntax-highlighting
-clone_plugin https://github.com/zsh-users/zsh-history-substring-search   zsh-history-substring-search
-clone_plugin https://github.com/romkatv/powerlevel10k                    powerlevel10k
 
-# ── 6. tmux 插件 ────────────────────────────────────────────
-info "安装 tmux 插件"
-TP="$HOME/.config/tmux/plugins"; mkdir -p "$TP"
-# 直接克隆，不靠 tpm 的 install_plugins——它要从运行中的 tmux server 读插件路径，新机器上还没有 server
-for p in tpm tmux-resurrect tmux-continuum; do
-  [ -d "$TP/$p/.git" ] || git clone -q --depth 1 "https://github.com/tmux-plugins/$p" "$TP/$p"
-  ok "$p"
+ALL=""
+for id in $ORDER $(ls "$DOTFILES/modules"); do
+  [ -f "$DOTFILES/modules/$id/install.sh" ] || continue
+  case " $ALL " in *" $id "*) continue ;; esac
+  supported "$id" && ALL="$ALL $id"
 done
+ALL="${ALL# }"
+[ -n "$ALL" ] || die "这台机器上没有可装的模块"
 
-# ── 7. 软链配置 ─────────────────────────────────────────────
-info "链接配置文件"
-link() {
-  local src=$1 dst=$2
-  mkdir -p "$(dirname "$dst")"
-  if [ -e "$dst" ] && [ ! -L "$dst" ]; then
-    mv "$dst" "$dst.bak.$(date +%Y%m%d%H%M%S)"; warn "已备份原有 $(basename "$dst")"
-  fi
-  ln -sfn "$src" "$dst"; ok "$(echo "$dst" | sed "s|$HOME|~|")"
-}
-ZSHENV_LINE='export ZDOTDIR="$HOME/.config/zsh"'
-if [ -e "$HOME/.zshenv" ] && ! grep -qxF "$ZSHENV_LINE" "$HOME/.zshenv"; then
-  cp "$HOME/.zshenv" "$HOME/.zshenv.bak.$(date +%Y%m%d%H%M%S)"; warn "已备份原有 .zshenv"
-fi
-grep -qxF "$ZSHENV_LINE" "$HOME/.zshenv" 2>/dev/null || echo "$ZSHENV_LINE" >> "$HOME/.zshenv"
-link "$DOTFILES/config/zsh/zshrc"                 "$HOME/.config/zsh/.zshrc"
-[ -f "$DOTFILES/config/zsh/p10k.zsh" ] && \
-link "$DOTFILES/config/zsh/p10k.zsh"              "$HOME/.config/zsh/.p10k.zsh"
-link "$DOTFILES/config/tmux/tmux.conf"            "$HOME/.config/tmux/tmux.conf"
-link "$DOTFILES/config/ghostty/config.ghostty"    "$HOME/.config/ghostty/config.ghostty"
-link "$DOTFILES/config/ghostty/themes"            "$HOME/.config/ghostty/themes"
-link "$DOTFILES/config/ghostty/shaders"           "$HOME/.config/ghostty/shaders"
-mkdir -p "$HOME/.local/bin/tmux"
-link "$DOTFILES/bin/theme-preview"                "$HOME/.local/bin/theme-preview"
-for f in "$DOTFILES"/bin/tmux/*.sh; do
-  link "$f" "$HOME/.local/bin/tmux/$(basename "$f")"
-done
-chmod +x "$DOTFILES"/bin/theme-preview "$DOTFILES"/bin/tmux/*.sh 2>/dev/null || true
-
-# ── 8. Claude Code hook（可选，仅在已装时合并）──────────────
-if [ -d "$HOME/.claude" ]; then
-  info "注册 Claude Code → tmux 状态染色 hook"
-  python3 - "$HOME/.claude/settings.json" "$HOME/.local/bin/tmux/claude-state.sh" <<'PY' && ok "hooks 已合并" || warn "hooks 合并跳过"
-import json,os,sys
-p,cmd=sys.argv[1],sys.argv[2]
-d=json.load(open(p)) if os.path.exists(p) else {}
-h=d.setdefault("hooks",{})
-entry=lambda m=None:{**({"matcher":m} if m else {}),
-    "hooks":[{"type":"command","command":cmd,"async":True,"timeout":5}]}
-for ev in ["SessionStart","UserPromptSubmit","Notification","Stop","SessionEnd"]:
-    h.setdefault(ev,[entry()])
-h.setdefault("PreToolUse",[entry("*")])
-if os.path.exists(p): os.replace(p,p+".bak")
-json.dump(d,open(p,"w"),indent=2,ensure_ascii=False)
-PY
+if [ "$MODE" = list ]; then
+  for id in $ALL; do printf '  %-18s %s — %s\n' "$id" "$(meta "$id" name)" "$(meta "$id" desc)"; done
+  exit 0
 fi
 
-# ── 9. Ghostty 毛玻璃（可选，仅在装了 Blur my Shell 时）─────
-# GNOME 不支持 Ghostty 自己的 background-blur，只能让 Blur my Shell 模糊它背后。
-# 没装这个扩展就跳过，Ghostty 仍是纯半透明。
-BMS_SCHEMAS=""
-for d in "$HOME/.local/share/gnome-shell/extensions/blur-my-shell@aunetx" \
-         /usr/share/gnome-shell/extensions/blur-my-shell@aunetx; do
-  [ -d "$d/schemas" ] && { BMS_SCHEMAS="$d/schemas"; break; }
-done
-if [ -n "$BMS_SCHEMAS" ] && have gsettings; then
-  info "Blur my Shell：模糊 Ghostty 窗口背后"
-  bms_get() { gsettings --schemadir "$BMS_SCHEMAS" get org.gnome.shell.extensions.blur-my-shell.applications "$1"; }
-  bms_set() { gsettings --schemadir "$BMS_SCHEMAS" set org.gnome.shell.extensions.blur-my-shell.applications "$1" "$2"; }
-  # 白名单是追加，不覆盖已有条目
-  wl=$(python3 -c "import ast,sys; l=ast.literal_eval(sys.argv[1].replace('@as ','')); a='com.mitchellh.ghostty'; print(l if a in l else l+[a])" "$(bms_get whitelist)")
-  { bms_set whitelist "$wl" && bms_set opacity 255 && bms_set dynamic-opacity false && bms_set blur true; } \
-    && ok "已开启（只对 Ghostty）" || warn "Blur my Shell 设置失败，跳过"
-fi
-
-# ── 10. 默认 shell ──────────────────────────────────────────
-ZSH_BIN="$(command -v zsh)"
-if [ "$(getent passwd "$USER" | cut -d: -f7)" != "$ZSH_BIN" ]; then
-  info "把登录 shell 改成 zsh"
-  grep -qxF "$ZSH_BIN" /etc/shells || echo "$ZSH_BIN" | $SUDO tee -a /etc/shells >/dev/null
-  chsh -s "$ZSH_BIN" && ok "已改（下次登录生效）" || warn "chsh 失败，请手动: chsh -s $ZSH_BIN"
+# ── 选择 ────────────────────────────────────────────────────
+SEL=""
+if [ "$MODE" = all ]; then
+  SEL="$ALL"
+elif [ "$MODE" = only ]; then
+  for id in $(echo "$ONLY" | tr ',' ' '); do
+    case " $ALL " in
+      *" $id "*) SEL="$SEL $id" ;;
+      *) die "模块 $id 不存在或不支持本系统（--list 看可用的）" ;;
+    esac
+  done
 else
-  ok "登录 shell 已是 zsh"
+  has_tty || die "没有可交互的终端。用 --all 或 --only <模块,...> 指定要装什么"
+  N=$(echo $ALL | wc -w | tr -d ' ')
+  # 每个模块一个勾选位，1 = 选中；默认全选
+  CHECK=""; for id in $ALL; do CHECK="${CHECK}1"; done
+  CUR=1
+
+  nth()    { echo $ALL | tr ' ' '\n' | sed -n "${1}p"; }   # 第 n 个模块名
+  bit()    { printf '%s' "${CHECK:$(( $1 - 1 )):1}"; }
+  toggle() {
+    local b=1; [ "$(bit "$1")" = 1 ] && b=0
+    CHECK="${CHECK:0:$(( $1 - 1 ))}$b${CHECK:$1}"
+  }
+
+  draw() {
+    local i id mark ptr
+    {
+      printf '\033[H\033[J'
+      printf '\n  \033[1m选择要安装的内容\033[0m  \033[2m(%s)\033[0m\n\n' "$( [ "$OS" = macos ] && echo macOS || echo "$PRETTY" )"
+      i=1
+      for id in $ALL; do
+        [ "$(bit $i)" = 1 ] && mark='\033[38;5;77m◉\033[0m' || mark='\033[2m○\033[0m'
+        if [ $i -eq $CUR ]; then ptr='\033[38;5;111m❯\033[0m'; else ptr=' '; fi
+        printf "  $ptr $mark  %s\n" "$(meta "$id" name)"
+        i=$((i + 1))
+      done
+      printf '\n  \033[2m%s\033[0m\n' "$(meta "$(nth $CUR)" desc)"
+      local needs; needs=$(meta "$(nth $CUR)" needs)
+      if [ -n "$needs" ]; then printf '  \033[2m依赖：%s（会自动一起装）\033[0m\n' "$needs"; fi
+      printf '\n  \033[2m↑↓ 移动 · 空格 勾选 · a 全选/全不选 · 回车 开始 · q 退出\033[0m\n'
+    } >/dev/tty
+  }
+
+  PRETTY="$( [ -r /etc/os-release ] && . /etc/os-release && echo "$PRETTY_NAME" || uname -s )"
+  # 用备用屏幕画菜单：每次整屏重画，不怕中文宽度和自动换行算错行数
+  printf '\033[?1049h\033[?25l' >/dev/tty
+  trap 'printf "\033[?25h\033[?1049l" >/dev/tty' EXIT
+  while :; do
+    draw
+    IFS= read -rsn1 key </dev/tty || key=q
+    if [ "$key" = $'\033' ]; then IFS= read -rsn2 rest </dev/tty || rest=""; key="ESC$rest"; fi
+    case "$key" in
+      'ESC[A'|k) if [ $CUR -gt 1 ]; then CUR=$((CUR - 1)); fi ;;
+      'ESC[B'|j) if [ $CUR -lt $N ]; then CUR=$((CUR + 1)); fi ;;
+      ' ') toggle $CUR ;;
+      a|A) case "$CHECK" in *0*) CHECK=$(printf '%s' "$CHECK" | tr 0 1) ;; *) CHECK=$(printf '%s' "$CHECK" | tr 1 0) ;; esac ;;
+      '') break ;;
+      q|Q) printf '\033[?25h\033[?1049l' >/dev/tty; trap - EXIT; echo "已取消"; exit 0 ;;
+    esac
+  done
+  printf '\033[?25h\033[?1049l' >/dev/tty; trap - EXIT
+  i=1; for id in $ALL; do if [ "$(bit $i)" = 1 ]; then SEL="$SEL $id"; fi; i=$((i + 1)); done
 fi
+
+# 补上依赖，并按 ORDER 排序
+add_needs() {
+  local id=$1 dep
+  for dep in $(meta "$id" needs); do
+    case " $SEL " in *" $dep "*) ;; *)
+      case " $ALL " in *" $dep "*) SEL="$SEL $dep"; add_needs "$dep"; info "$(meta "$id" name) 依赖 $(meta "$dep" name)，一起装" ;;
+      *) die "$id 依赖的 $dep 不支持本系统" ;; esac ;;
+    esac
+  done
+}
+for id in $SEL; do add_needs "$id"; done
+RUN=""; for id in $ALL; do case " $SEL " in *" $id "*) RUN="$RUN $id" ;; esac; done
+RUN="${RUN# }"
+[ -n "$RUN" ] || { echo "什么都没选，退出"; exit 0; }
+# 试运行：只打印会执行哪些模块（测试菜单和依赖用）
+if [ -n "${DOTFILES_DRY_RUN:-}" ]; then echo "会执行：$RUN"; exit 0; fi
+
+# ── 执行 ────────────────────────────────────────────────────
+DONE="" FAILED=""
+for id in $RUN; do
+  echo
+  bold "━━ $(meta "$id" name)"
+  if bash "$DOTFILES/modules/$id/install.sh"; then DONE="$DONE $id"
+  else FAILED="$FAILED $id"; warn "$(meta "$id" name) 出错，继续装下一个"; fi
+done
 
 echo
 bold "装完了。"
-echo "  1. 重启 Ghostty（字体和配置生效）"
-echo "  2. 新终端里首次进 zsh 会弹 powerlevel10k 向导（已带配置则跳过）"
-echo "  3. 敲 tmux 启动；按 Alt+m 打开菜单，Ctrl+b ? 看速查表"
+for id in $DONE;   do ok   "$(meta "$id" name)"; done
+for id in $FAILED; do warn "$(meta "$id" name)（失败，可以单独重跑：bash $DOTFILES/install.sh --only $id）"; done
+[ -z "$FAILED" ]

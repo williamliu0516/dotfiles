@@ -1,0 +1,10 @@
+# macOS 专属设置，由主配置通过 platform.ghostty 引入
+
+# macOS 上 Ghostty 能自己模糊窗口背后，不需要额外扩展
+background-blur = 20
+
+# 标题栏藏起来，但保留窗口圆角和阴影（window-decoration = false 在 macOS 上会连这些一起去掉）
+macos-titlebar-style = hidden
+
+# 让 Option 当 Alt 用：tmux 的 Alt+m 菜单、Alt+h/j/k/l 切窗格都靠它
+macos-option-as-alt = true

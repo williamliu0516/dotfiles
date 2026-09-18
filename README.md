@@ -1,16 +1,36 @@
 # dotfiles
 
-Terminal setup: **Ghostty + tmux + zsh**. One command on a fresh machine.
+Terminal setup (**Ghostty + tmux + zsh**), Claude Code extras, and a GNOME desktop look. One command on a fresh machine, Ubuntu or macOS:
 
 ```bash
 curl -fsSL https://xiaweiliu.com/dotfiles/install.sh | bash
 ```
 
-Installs Ghostty itself if it isn't already there. Same script straight from GitHub, if the site is ever down:
+It opens a menu — pick what you want with the arrow keys and space, Enter to start. Only the parts that work on the current machine are listed. Same script straight from GitHub, if the site is ever down:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/williamliu0516/dotfiles/main/install.sh | bash
 ```
+
+## Modules
+
+| id | | Linux | macOS |
+|---|---|:-:|:-:|
+| `terminal` | Ghostty + tmux + zsh, fonts, plugins | ✓ | ✓ |
+| `claude-tmux` | tmux window numbers coloured by Claude Code state (needs `terminal`) | ✓ | ✓ |
+| `claude-statusline` | Claude Code status line — folder, branch, model, 5h and weekly usage. From [claude-status-bar](https://github.com/williamliu0516/claude-status-bar) | ✓ | ✓ |
+| `keyboard-display` | Claude Code sessions on a keyboard's 142×428 panel. From [context-keyboard-display](https://github.com/williamliu0516/context-keyboard-display); the hotkeys are macOS-only | ✓ | ✓ |
+| `gnome-desktop` | Orchis theme, Tela icons, lighter top bar and dock, auto-hiding top bar, Super+Enter drop-down Ghostty | GNOME | |
+
+Skip the menu:
+
+```bash
+bash install.sh --list                         # what this machine can install
+bash install.sh --only terminal,claude-tmux    # dependencies are added for you
+bash install.sh --all
+```
+
+Every module is safe to re-run: it skips what's already there and backs up anything it replaces.
 
 ---
 
@@ -18,7 +38,7 @@ curl -fsSL https://raw.githubusercontent.com/williamliu0516/dotfiles/main/instal
 
 | | |
 |---|---|
-| **Terminal** | Ghostty — `snappy` theme (dark/light, follows the system), Maple Mono NF CN, cursor-trail shader (off — it keeps a core 18% busy while idle), semi-transparent with a frosted-glass blur of the real desktop (via Blur my Shell on GNOME) |
+| **Terminal** | Ghostty — `snappy` theme (dark/light, follows the system), Maple Mono NF CN, cursor-trail shader (off — it keeps a core 18% busy while idle), semi-transparent with a frosted-glass blur of the real desktop (Ghostty's own blur on macOS, Blur my Shell on GNOME) |
 | **Shell** | zsh + powerlevel10k, autosuggestions, fast-syntax-highlighting, history prefix search |
 | **Multiplexer** | tmux — one menu key instead of a wall of shortcuts, sessions survive reboot |
 | **Tools** | eza, bat, zoxide, fzf |
@@ -26,6 +46,10 @@ curl -fsSL https://raw.githubusercontent.com/williamliu0516/dotfiles/main/instal
 ### Shell
 
 Tab accepts the greyed-out suggestion when there is one, and completes normally when there isn't. Up-arrow filters history by what you've already typed. `Ctrl+R` fuzzy-searches all of it.
+
+On GNOME, `Ctrl+Enter` maximizes rather than going fullscreen: GNOME stops compositing what's behind a fullscreen window, which would kill the blur. With the auto-hiding top bar it looks the same.
+
+On macOS, Option works as Alt, so the tmux keys below are the same on both.
 
 ### tmux
 
@@ -39,32 +63,52 @@ Window numbers are colour-coded by Claude Code state — cyan running, yellow ne
 
 Sessions auto-save every 15 minutes and restore on start (tmux-resurrect + continuum).
 
-The status bar shows battery level with time to empty, or time to full while charging. On a desktop with no battery the segment disappears entirely.
+The status bar shows battery level with time to empty, or time to full while charging (`/sys` and upower on Linux, `pmset` on macOS). On a desktop with no battery the segment disappears entirely.
+
+### GNOME desktop
+
+Everything goes into your home directory — nothing under `/usr` is touched. Before changing anything the module dumps all of dconf to `~/desktop-backup-<timestamp>.dconf`; `dconf load / < that-file` puts it all back.
+
+- **Orchis-Dark-Compact** shell and GTK theme, **Tela-circle-dark** icons.
+- **Top bar and dock** a lighter translucent grey instead of near-black. The patch matches CSS selectors rather than line numbers and keeps `gnome-shell.css.orig`; reinstalling Orchis undoes it, re-running the module redoes it.
+- **Dock:** upstream Dash to Dock replaces Ubuntu Dock, whose own stylesheet overrides the theme.
+- **Hide Top Bar** in intellihide mode: the bar hides only when a window covers it, and slides back when the pointer touches the top edge.
+- **Quake Terminal:** `Super+Enter` drops Ghostty down from the top; press again to put it away.
+- **Blur my Shell** blurs only behind Ghostty; panel, dock and overview blur stay off to save power.
+
+Log out and back in afterwards — GNOME on Wayland only discovers new extensions at login.
 
 ---
 
 ## Layout
 
 ```
+install.sh           menu, then runs the chosen modules in order
+lib/common.sh        shared helpers (output, link, apt/brew)
+modules/<id>/install.sh
+                     one per module; the header declares name, desc, os, needs
 config/
   zsh/       zshrc, p10k.zsh
   tmux/      tmux.conf
-  ghostty/   config.ghostty, themes/, shaders/
+  ghostty/   config.ghostty (shared), linux.ghostty / macos.ghostty (linked as platform.ghostty), themes/, shaders/
+  gnome/     extensions.dconf — extension settings, merged with dconf load
 bin/
   theme-preview        preview any Ghostty theme in the terminal, ranked by contrast
   tmux/cheatsheet.sh   the Ctrl+b ? popup
   tmux/claude-state.sh Claude Code hook → tmux window colour
   tmux/save-pane.sh    dump the current pane's scrollback to a file
   tmux/battery.sh      battery segment for the status bar
-install.sh
 index.html           the page at xiaweiliu.com/dotfiles
 ```
+
+To add a module, create `modules/<id>/install.sh` with the header comments; the menu picks it up. Add the id to `ORDER` in `install.sh` if it should sort before the others.
 
 Everything is symlinked from `~/.dotfiles`, so edits in the repo are live. Existing files are backed up as `<name>.bak.<timestamp>` before being replaced.
 
 ## Requirements
 
-Debian/Ubuntu with `apt` and `sudo`. Ghostty comes from [`mkasberg/ghostty-ubuntu`](https://github.com/mkasberg/ghostty-ubuntu); the installer picks the `.deb` matching your release and architecture, falling back to the newest build for your architecture.
+- **Linux:** Debian/Ubuntu with `apt` and `sudo`. Ghostty comes from [`mkasberg/ghostty-ubuntu`](https://github.com/mkasberg/ghostty-ubuntu); the installer picks the `.deb` matching your release and architecture, falling back to the newest build for your architecture.
+- **macOS:** [Homebrew](https://brew.sh) and the Xcode command line tools (`xcode-select --install`). Ghostty and the font come from brew casks; zsh stays the system `/bin/zsh`.
 
 ## Options
 
@@ -75,6 +119,6 @@ MAPLE_FONT_VERSION=v7.8      bash install.sh   # pin the font version
 
 ## Notes
 
-The installer changes your login shell to zsh (`chsh`) and merges the Claude Code hooks into `~/.claude/settings.json` only if that directory already exists, backing the file up first. Nothing else outside `$HOME` is touched.
+`terminal` changes your login shell to zsh (`chsh`) on Linux. `claude-tmux` merges its hooks into `~/.claude/settings.json`, backing the file up first, and leaves it alone if they're already there. `claude-statusline` asks before replacing a local `statusline.py` that differs from the published one. Nothing outside `$HOME` is touched except the packages themselves.
 
 `theme-preview` ranks every installed Ghostty theme by WCAG contrast and renders a real sample of each — useful when a theme looks nice but reads badly.

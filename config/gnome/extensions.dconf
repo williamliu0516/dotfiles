@@ -1,0 +1,55 @@
+# GNOME 扩展设置。安装时用 dconf load 合并进 /org/gnome/shell/extensions/，
+# 只覆盖这里列出的键，其他设置不动。
+
+# 上游 Dash to Dock：底部、自动隐藏，用 Orchis 的样式
+[dash-to-dock]
+apply-custom-theme=true
+custom-theme-shrink=false
+dash-max-icon-size=42
+dock-fixed=false
+dock-position='BOTTOM'
+extend-height=false
+running-indicator-style='DEFAULT'
+show-mounts=false
+show-trash=false
+
+# Hide Top Bar：窗口挡住顶栏时才隐藏，鼠标碰到顶边滑出；全屏时不弹出
+[hidetopbar]
+enable-intellihide=true
+mouse-sensitive=true
+mouse-sensitive-fullscreen-window=false
+
+# Quake Terminal：Super+Enter 从顶部拉出 Ghostty。
+# 单独开一个 Ghostty 进程，否则会和普通窗口共用进程，扩展抓错窗口
+[quake-terminal]
+launch-args-map={'com.mitchellh.ghostty.desktop': '--gtk-single-instance=false'}
+render-on-current-monitor=true
+terminal-id='com.mitchellh.ghostty.desktop'
+terminal-shortcut=['<Super>Return']
+
+# Blur my Shell：只模糊 Ghostty 窗口背后，顶栏、Dock、概览都不模糊（省电）
+[blur-my-shell]
+settings-version=2
+
+[blur-my-shell/applications]
+blur=true
+blur-on-overview=false
+dynamic-opacity=false
+enable-all=false
+opacity=255
+whitelist=['com.mitchellh.ghostty']
+
+[blur-my-shell/appfolder]
+blur=false
+
+[blur-my-shell/dash-to-dock]
+blur=false
+
+[blur-my-shell/overview]
+blur=false
+
+[blur-my-shell/panel]
+blur=false
+
+[user-theme]
+name='Orchis-Dark-Compact'

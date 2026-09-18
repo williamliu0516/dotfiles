@@ -1,0 +1,14 @@
+# Linux（GNOME）专属设置，由主配置通过 platform.ghostty 引入
+
+# 不要标题栏，窗口靠 Super+拖动 或键盘操作
+window-decoration = false
+
+# GNOME 不支持 Ghostty 自己的 background-blur，模糊由 Blur my Shell 的应用窗口模糊提供
+# （只对 Ghostty 开，安装脚本会配置）；没装它时就是纯半透明。
+
+# 每个窗口独立进程。下拉终端（Quake Terminal 扩展）要靠这个才能抓准自己的窗口
+gtk-single-instance = false
+
+# Ctrl+Enter 默认是全屏；GNOME 全屏时不再合成背后的内容，毛玻璃会消失。
+# 改成最大化：配合 Hide Top Bar 的智能隐藏，效果接近全屏且保留模糊。
+keybind = ctrl+enter=toggle_maximize

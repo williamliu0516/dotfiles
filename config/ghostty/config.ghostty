@@ -23,10 +23,8 @@ cursor-style-blink = false
 adjust-cursor-thickness = 2
 
 # ===== 窗口 =====
-window-decoration = false
 # 半透明 + 毛玻璃：透出的是真实的桌面，而不是一张贴上去的图。
-# GNOME 不支持 Ghostty 自己的 background-blur，模糊由 Blur my Shell 的应用窗口模糊提供
-# （只对 Ghostty 开，install.sh 会配置）；没装它时就是纯半透明。
+# 模糊怎么做因系统而异，见 linux.ghostty / macos.ghostty。
 # 0.75 时正文在最坏情况（背后是白色窗口）仍有 4.9:1，背后是壁纸时 9.1:1。
 # 开销实测：终端持续输出时 gnome-shell 多占约 2–5% 单核；画面静止时按设计不重算（这点没单独测）。
 background-opacity = 0.75
@@ -37,9 +35,6 @@ window-padding-balance = true
 # 内边距用背景色填满，不露出接缝
 window-padding-color = extend
 resize-overlay = never
-# Ctrl+Enter 默认是全屏；GNOME 全屏时不再合成背后的内容，毛玻璃会消失。
-# 改成最大化：配合 Hide Top Bar 的智能隐藏，效果接近全屏且保留模糊。
-keybind = ctrl+enter=toggle_maximize
 
 # ===== 光标拖尾动画（你朋友那个着色器）=====
 # 已关闭：着色器要求窗口在前台时持续跑动画循环，实测空闲占 18% 单核 CPU，关掉后为 0%。
@@ -52,8 +47,11 @@ shell-integration-features = no-cursor,no-sudo,title
 bell-features = no-system,no-audio,no-attention,no-title,no-border
 clipboard-read = allow
 clipboard-write = allow
-gtk-single-instance = false
 link-url = true
 mouse-hide-while-typing = true
 copy-on-select = clipboard
 scrollback-limit = 100000
+
+# ===== 系统专属设置 =====
+# 安装脚本把 linux.ghostty 或 macos.ghostty 软链成 platform.ghostty；? 表示文件不存在也不报错
+config-file = ?platform.ghostty

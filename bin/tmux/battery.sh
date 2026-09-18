@@ -4,21 +4,39 @@
 set -u
 PS_DIR="${POWER_SUPPLY_DIR:-/sys/class/power_supply}"   # 可覆盖，方便测试
 
-# 找系统电池；scope=Device 的是鼠标、键盘这类外设电池，跳过
-bat=""
-for d in "$PS_DIR"/*; do
-  [ "$(cat "$d/type" 2>/dev/null)" = "Battery" ] || continue
-  [ "$(cat "$d/scope" 2>/dev/null)" = "Device" ] && continue
-  bat=$d; break
-done
-[ -n "$bat" ] || exit 0
+pct="" status="" mins=""
 
-pct=$(cat "$bat/capacity" 2>/dev/null || echo 0)
-status=$(cat "$bat/status" 2>/dev/null || echo Unknown)
+# macOS：pmset 一行就有百分比、状态和剩余时间，例如
+#   -InternalBattery-0 (id=1234)	85%; discharging; 4:12 remaining present: true
+if [ "$(uname -s)" = Darwin ]; then
+  line=$(pmset -g batt 2>/dev/null | grep -m1 InternalBattery || true)
+  [ -n "$line" ] || exit 0          # 没电池的 Mac（mini、Studio）
+  pct=$(printf '%s' "$line" | grep -oE '[0-9]+%' | tr -d %)
+  case "$line" in
+    *"; charging;"*)                     status=Charging ;;
+    *"; charged;"*|*"AC attached"*|*"; finishing charge;"*) status=Full ;;
+    *)                                   status=Discharging ;;
+  esac
+  t=$(printf '%s' "$line" | grep -oE '[0-9]+:[0-9]{2} remaining' | cut -d' ' -f1 || true)
+  [ -n "$t" ] && mins=$(( ${t%%:*} * 60 + 10#${t##*:} ))
+fi
+
+# Linux：找系统电池；scope=Device 的是鼠标、键盘这类外设电池，跳过
+bat=""
+if [ -z "$pct" ]; then
+  for d in "$PS_DIR"/*; do
+    [ "$(cat "$d/type" 2>/dev/null)" = "Battery" ] || continue
+    [ "$(cat "$d/scope" 2>/dev/null)" = "Device" ] && continue
+    bat=$d; break
+  done
+  [ -n "$bat" ] || exit 0
+
+  pct=$(cat "$bat/capacity" 2>/dev/null || echo 0)
+  status=$(cat "$bat/status" 2>/dev/null || echo Unknown)
+fi
 
 # 剩余时间（分钟）：优先 upower，它做过平滑，不会每次刷新都跳
-mins=""
-if command -v upower >/dev/null 2>&1; then
+if [ -n "$bat" ] && command -v upower >/dev/null 2>&1; then
   dev=$(upower -e 2>/dev/null | grep -m1 "/battery_$(basename "$bat")$" || true)
   if [ -n "$dev" ]; then
     read -r val unit < <(upower -i "$dev" 2>/dev/null \
@@ -31,7 +49,7 @@ if command -v upower >/dev/null 2>&1; then
   fi
 fi
 # 没有 upower 时按瞬时功率自己算；energy_* 配 power_now，charge_* 配 current_now
-if [ -z "$mins" ]; then
+if [ -n "$bat" ] && [ -z "$mins" ]; then
   if [ -r "$bat/energy_now" ]; then n=energy_now f=energy_full r=power_now
   else                              n=charge_now f=charge_full r=current_now; fi
   now=$(cat "$bat/$n" 2>/dev/null || echo 0)
