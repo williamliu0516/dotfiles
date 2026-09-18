@@ -113,8 +113,11 @@ clone_plugin https://github.com/romkatv/powerlevel10k                    powerle
 # ── 6. tmux 插件 ────────────────────────────────────────────
 info "安装 tmux 插件"
 TP="$HOME/.config/tmux/plugins"; mkdir -p "$TP"
-[ -d "$TP/tpm/.git" ] || git clone -q --depth 1 https://github.com/tmux-plugins/tpm "$TP/tpm"
-ok "tpm"
+# 直接克隆，不靠 tpm 的 install_plugins——它要从运行中的 tmux server 读插件路径，新机器上还没有 server
+for p in tpm tmux-resurrect tmux-continuum; do
+  [ -d "$TP/$p/.git" ] || git clone -q --depth 1 "https://github.com/tmux-plugins/$p" "$TP/$p"
+  ok "$p"
+done
 
 # ── 7. 软链配置 ─────────────────────────────────────────────
 info "链接配置文件"

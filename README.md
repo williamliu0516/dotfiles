@@ -18,7 +18,7 @@ curl -fsSL https://raw.githubusercontent.com/williamliu0516/dotfiles/main/instal
 
 | | |
 |---|---|
-| **Terminal** | Ghostty — `snappy` theme (dark/light, follows the system), Maple Mono NF CN, cursor-trail shader |
+| **Terminal** | Ghostty — `snappy` theme (dark/light, follows the system), Maple Mono NF CN, cursor-trail shader, semi-transparent with a dimmed background image |
 | **Shell** | zsh + powerlevel10k, autosuggestions, fast-syntax-highlighting, history prefix search |
 | **Multiplexer** | tmux — one menu key instead of a wall of shortcuts, sessions survive reboot |
 | **Tools** | eza, bat, zoxide, fzf |
@@ -32,6 +32,8 @@ Tab accepts the greyed-out suggestion when there is one, and completes normally 
 You only need one key: **`Alt+m`** opens a menu with every action labelled — splits, windows, sessions, search, save output. **`Ctrl+b` `?`** shows a cheatsheet generated from the config itself, so it can't drift out of date.
 
 Direct keys worth knowing: `Alt+h/j/k/l` panes · `Alt+←/→` windows · `Alt+f` zoom · `Alt+d` detach.
+
+Split a window and each pane gets a title bar — index, running command, path — with the active one in the accent colour. A single pane has no title bar, so it doesn't cost a row.
 
 Window numbers are colour-coded by Claude Code state — cyan running, yellow needs approval, green done, red error.
 
