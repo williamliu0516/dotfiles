@@ -77,23 +77,22 @@ gsettings set org.gnome.desktop.interface color-scheme prefer-dark
 ok "主题、图标、扩展设置"
 
 # ── 4. 顶栏和 Dock 调浅 ─────────────────────────────────────
-# Orchis 深色版的顶栏是半透明纯黑、Dock 是深灰，统一换成浅一点的中灰。
+# Orchis 深色版的顶栏是半透明纯黑、Dock 是深灰：顶栏改成全透明，Dock 换成浅一点的中灰。
 # 按选择器改而不是按行号改，主题更新后行号变了也能改对；重装主题会覆盖，重跑本模块即可。
 CSS="$HOME/.themes/$THEME/gnome-shell/gnome-shell.css"
 [ -f "$CSS.orig" ] || cp "$CSS" "$CSS.orig"
-python3 - "$CSS" <<'PY' && ok "顶栏和 Dock 已调浅（原文件：gnome-shell.css.orig）" || warn "没找到要改的样式，主题结构可能变了，跳过"
+python3 - "$CSS" <<'PY' && ok "顶栏已透明、Dock 已调浅（原文件：gnome-shell.css.orig）" || warn "没找到要改的样式，主题结构可能变了，跳过"
 import re, sys
 path = sys.argv[1]
 css = open(path).read()
-COLOR = "rgba(62, 62, 68, 0.6)"
-rules = [  # (选择器, 属性)
-    ("#panel", "background-color"),
-    ("#panel .panel-corner", "-panel-corner-background-color"),
-    ("#dashtodockContainer #dash .dash-background", "background-color"),
+rules = [  # (选择器, 属性, 颜色)
+    ("#panel", "background-color", "transparent"),
+    ("#panel .panel-corner", "-panel-corner-background-color", "transparent"),
+    ("#dashtodockContainer #dash .dash-background", "background-color", "rgba(62, 62, 68, 0.6)"),
 ]
-for sel, prop in rules:
+for sel, prop, color in rules:
     block = re.compile(r"(^" + re.escape(sel) + r" \{[^}]*?" + re.escape(prop) + r": )[^;]+;", re.M)
-    css, n = block.subn(lambda m: m.group(1) + COLOR + ";", css, count=1)
+    css, n = block.subn(lambda m: m.group(1) + color + ";", css, count=1)
     if n == 0:
         sys.exit(f"missing {sel} {{ {prop} }}")
 open(path, "w").write(css)
