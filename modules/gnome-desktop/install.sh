@@ -95,10 +95,12 @@ for sel, prop, color in rules:
     css, n = block.subn(lambda m: m.group(1) + color + ";", css, count=1)
     if n == 0:
         sys.exit(f"missing {sel} {{ {prop} }}")
-# 顶栏字体加粗加大：追加在末尾覆盖原规则，带标记防止重跑时重复追加
+# 顶栏字体加粗加大：追加在末尾覆盖原规则；带标记，重跑时先删旧块再追加，参数改了也能更新
+# Ubuntu Sans 最粗只到 800，再粗靠同色 text-shadow 把笔画描厚
 MARK = "/* dotfiles: panel font */"
-if MARK not in css:
-    css += "\n" + MARK + "\n#panel .panel-button {\n  font-weight: 800;\n  font-size: 10.5pt;\n}\n"
+css = re.sub(r"\n?" + re.escape(MARK) + r"\n#panel \.panel-button \{[^}]*\}\n", "", css)
+css += ("\n" + MARK + "\n#panel .panel-button {\n  font-weight: 800;\n  font-size: 10.5pt;\n"
+        "  text-shadow: 0 0 1px rgba(255, 255, 255, 0.9);\n}\n")
 open(path, "w").write(css)
 PY
 # 让 GNOME 重新读主题（切走再切回）
