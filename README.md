@@ -45,7 +45,7 @@ Every module is safe to re-run: it skips what's already there and backs up anyth
 
 ### Shell
 
-Tab accepts the greyed-out suggestion when there is one, and completes normally when there isn't. Up-arrow filters history by what you've already typed. `Ctrl+R` fuzzy-searches all of it.
+Right-arrow accepts the greyed-out suggestion; Tab completes as usual. Up-arrow filters history by what you've already typed. `Ctrl+R` fuzzy-searches all of it.
 
 On GNOME, `Ctrl+Enter` maximizes rather than going fullscreen: GNOME stops compositing what's behind a fullscreen window, which would kill the blur. With the auto-hiding top bar it looks the same.
 

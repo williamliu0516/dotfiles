@@ -75,19 +75,9 @@ if command -v fzf >/dev/null; then
   fi
 fi
 
-# ===== Tab：有灰字建议就接受，否则正常补全 =====
-# 必须放在 fzf 之后 —— fzf 的 completion.zsh 会抢占 ^I
-_tab_accept_or_complete() {
-  if [[ -n "$POSTDISPLAY" ]]; then
-    zle autosuggest-accept
-  elif (( $+widgets[fzf-completion] )); then
-    zle fzf-completion
-  else
-    zle expand-or-complete
-  fi
-}
-zle -N _tab_accept_or_complete
-bindkey '^I' _tab_accept_or_complete
+# ===== → 接受灰字建议，Tab 保持正常补全 =====
+bindkey '^[[C' forward-char             # → ：在 autosuggestions 的接受列表里
+bindkey '^[OC' forward-char
 bindkey '^[[Z' reverse-menu-complete    # Shift+Tab 反向选菜单
 
 # ===== zoxide：z 按访问频率跳转 =====
