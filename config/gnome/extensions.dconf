@@ -15,7 +15,9 @@ show-trash=false
 
 # Hide Top Bar：窗口挡住顶栏时才隐藏，鼠标碰到顶边滑出；全屏时不弹出
 [hidetopbar]
-enable-intellihide=true
+# 关智能隐藏：顶栏平时隐藏、鼠标碰顶端滑出。Top Bar Squeeze 让滑出的顶栏占空间，
+# 窗口不再挡住它，开着智能隐藏的话顶栏就永远不收回了
+enable-intellihide=false
 mouse-sensitive=true
 mouse-sensitive-fullscreen-window=false
 

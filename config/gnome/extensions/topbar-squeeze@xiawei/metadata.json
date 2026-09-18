@@ -1,0 +1,6 @@
+{
+  "uuid": "topbar-squeeze@xiawei",
+  "name": "Top Bar Squeeze",
+  "description": "Hide Top Bar companion: while the top bar is fully shown, maximized windows shrink to make room; when it hides they fill the screen again.",
+  "shell-version": ["45", "46", "47", "48", "49", "50"]
+}

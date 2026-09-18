@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # name: Ubuntu 桌面美化
-# desc: Orchis 主题、Tela 图标、浅色顶栏和 Dock、顶栏智能隐藏、Super+Enter 下拉终端
+# desc: Orchis 主题、Tela 图标、透明顶栏和浅色 Dock、顶栏自动隐藏并挤窄窗口、Super+Enter 下拉终端
 # os:   gnome
 set -euo pipefail
 . "${DOTFILES_DIR:-$HOME/.dotfiles}/lib/common.sh"
@@ -63,6 +63,15 @@ for e in $EXTS; do install_ext "$e"; done
 DTD="$EXT_DIR/dash-to-dock@micxgx.gmail.com"
 [ -f "$DTD/stylesheet.css" ] && mv "$DTD/stylesheet.css" "$DTD/stylesheet.css.bak"
 gsettings_append org.gnome.shell disabled-extensions ubuntu-dock@ubuntu.com
+# 仓库自带的扩展：软链进扩展目录，改仓库里的代码即生效（重新登录后）
+#   topbar-squeeze：顶栏滑出时挤窄最大化窗口，收回时窗口铺满
+LOCAL_EXTS="topbar-squeeze@xiawei"
+for e in $LOCAL_EXTS; do
+  ln -sfn "$DOTFILES/config/gnome/extensions/$e" "$EXT_DIR/$e" && ok "$e（仓库自带）"
+done
+EXTS="$EXTS
+$LOCAL_EXTS"
+
 # 新装的扩展要重新登录才会被 GNOME 发现，gnome-extensions enable 现在会失败，
 # 所以直接写进启用列表
 for e in $EXTS; do gsettings_append org.gnome.shell enabled-extensions "$e"; done
