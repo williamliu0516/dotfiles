@@ -6,8 +6,11 @@ window-decoration = false
 # GNOME 不支持 Ghostty 自己的 background-blur，模糊由 Blur my Shell 的应用窗口模糊提供
 # （只对 Ghostty 开，安装脚本会配置）；没装它时就是纯半透明。
 
-# 每个窗口独立进程。下拉终端（Quake Terminal 扩展）要靠这个才能抓准自己的窗口
-gtk-single-instance = false
+# 这里不要写 gtk-single-instance = false：本文件是被 config-file 引入的，
+# 会在命令行参数之后生效，把 .desktop 的 --gtk-single-instance=true 也盖掉，
+# 结果后台服务实例拿不到 D-Bus 名字，点图标要等 2 分钟超时，窗口打不开。
+# 下拉终端要独立进程，是由 Quake Terminal 扩展的 launch-args
+# （--gtk-single-instance=false）负责的，安装脚本会配置。
 
 # Ctrl+Enter 默认是全屏；GNOME 全屏时不再合成背后的内容，毛玻璃会消失。
 # 改成最大化：配合 Hide Top Bar 的智能隐藏，效果接近全屏且保留模糊。
