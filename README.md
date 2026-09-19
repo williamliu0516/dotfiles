@@ -55,9 +55,22 @@ On macOS, `Ctrl+Enter` (or `Cmd+Enter`) uses non-native fullscreen: the window f
 
 ### tmux
 
-You only need one key: **`Alt+m`** opens a menu with every action labelled — splits, windows, sessions, search, save output. **`Ctrl+b` `?`** shows a cheatsheet generated from the config itself, so it can't drift out of date.
+You only need one key: **`Alt+m`** opens a menu with every action labelled; pressing it again closes the menu. **`Ctrl+b` `?`** shows a cheatsheet generated from the config itself, so it can't drift out of date.
 
-Direct keys worth knowing: `Alt+h/j/k/l` panes · `Alt+Shift+←/→/↑/↓` resize the current pane · `Alt+←/→` windows · `Alt+f` zoom · `Alt+d` detach. `Alt+m` again closes the menu. On macOS, Alt is Option.
+What the menu holds (the letter in brackets picks the item directly):
+
+| Group | Items |
+|---|---|
+| Panes | split right `s` · split below `d` · zoom / unzoom `f` |
+| Layout | side by side `h` · stacked `v` · tiled grid `=` |
+| Text | scroll back / copy mode `c` · search this pane `/` · paste `p` · clipboard history `P` · save pane output to a file `S` |
+| Sessions `z` | detach `d` · switch `s` · new `n` · rename `r` · kill this session `X` · pick another session to kill `k` (only lists sessions nobody is attached to) · kill all others `K` |
+| Close | kill pane `x` · kill window `X` |
+| | cheatsheet `?` · close menu `Alt+m` |
+
+Window management is deliberately not in the menu: `Alt+n` new window, `Alt+1`–`5` or `Alt+←/→` to switch, `Alt+;` back to the previous one, and tmux's own `Ctrl+b ,` to rename.
+
+Direct keys worth knowing: `Alt+h/j/k/l` panes · `Alt+Shift+←/→/↑/↓` resize the current pane, neighbours shrink to match · `Alt+←/→` windows · `Alt+f` zoom · `Alt+d` detach · `Ctrl+b K` pick a session to kill. On macOS, Alt is Option.
 
 Split a window and each pane gets a title bar — index, running command, path — with the active one in the accent colour. A single pane has no title bar, so it doesn't cost a row.
 
