@@ -41,7 +41,7 @@ Every module is safe to re-run: it skips what's already there and backs up anyth
 | **Terminal** | Ghostty — `snappy` theme (dark/light, follows the system), Maple Mono NF CN, cursor-trail shader (off — it keeps a core 18% busy while idle), semi-transparent with a frosted-glass blur of the real desktop (Ghostty's own blur on macOS, Blur my Shell on GNOME) |
 | **Shell** | zsh + powerlevel10k, autosuggestions, fast-syntax-highlighting, history prefix search |
 | **Multiplexer** | tmux — one menu key instead of a wall of shortcuts, sessions survive reboot |
-| **Tools** | eza, bat, zoxide, fzf |
+| **Tools** | eza, bat, zoxide, fzf, yazi (`y` in the shell drops you in the directory you quit from; `Alt+y` opens it in a tmux popup) |
 
 ### Shell
 
@@ -62,7 +62,7 @@ What the menu holds (the letter in brackets picks the item directly):
 | Group | Items |
 |---|---|
 | Panes | split right `s` · split below `d` · zoom / unzoom `f` |
-| Claude | new window running Claude Code in the current directory `C` |
+| Tools | new window running Claude Code in the current directory `C` · yazi file manager in a popup `y` |
 | Layout | side by side `h` · stacked `v` · tiled grid `=` |
 | Text | scroll back / copy mode `c` · search this pane `/` · paste `p` · clipboard history `P` · save pane output to a file `S` |
 | Sessions `z` | detach `d` · switch `s` · new `n` · rename `r` · kill this session `X` · pick another session to kill `k` (only lists sessions nobody is attached to) · kill all others `K` |
@@ -79,7 +79,7 @@ Window numbers are colour-coded by Claude Code state — cyan running, yellow ne
 
 Sessions auto-save every 15 minutes and restore on start (tmux-resurrect + continuum).
 
-The status bar shows battery level with time to empty, or time to full while charging (`/sys` and upower on Linux, `pmset` on macOS). On a desktop with no battery the segment disappears entirely.
+The status bar shows CPU, memory in use and GPU load (amber above 70%, red above 90%; the GPU segment appears where it can be read — Apple Silicon, NVIDIA, AMD), then battery level with time to empty, or time to full while charging (`/sys` and upower on Linux, `pmset` on macOS). On a desktop with no battery the segment disappears entirely.
 
 ### GNOME desktop
 

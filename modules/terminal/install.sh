@@ -11,9 +11,26 @@ FONT_VER="${MAPLE_FONT_VERSION:-v7.9}"
 info "安装系统包"
 if [ "$OS" = macos ]; then
   # zsh 用系统自带的 /bin/zsh（已是默认 shell），不另装 brew 版
-  pkg_install tmux fzf eza bat zoxide
+  pkg_install tmux fzf eza bat zoxide yazi
 else
   pkg_install zsh tmux git curl unzip fontconfig fzf eza bat zoxide ca-certificates
+  # yazi 不在 Ubuntu 的源里，装官方发布的 .deb
+  if have yazi; then
+    ok "yazi 已安装"
+  else
+    info "安装 yazi（GitHub 发布的 .deb）"
+    case "$(dpkg --print-architecture)" in amd64) YARCH=x86_64 ;; arm64) YARCH=aarch64 ;; *) YARCH="" ;; esac
+    YURL="$( [ -n "$YARCH" ] && curl -fsSL https://api.github.com/repos/sxyazi/yazi/releases/latest \
+            | grep -o "https://[^\"]*yazi-${YARCH}-unknown-linux-gnu\.deb" | head -1 || true)"
+    if [ -n "$YURL" ]; then
+      TMPY="$(mktemp -d)"
+      curl -fsSL -o "$TMPY/yazi.deb" "$YURL" && $SUDO apt-get install -y -qq "$TMPY/yazi.deb" >/dev/null 2>&1 \
+        && ok "yazi $(yazi --version 2>/dev/null | head -1 || true)" || warn "yazi 装不上，跳过"
+      rm -rf "$TMPY"
+    else
+      warn "没有本架构的 yazi 包，跳过"
+    fi
+  fi
 fi
 
 # ── 2. Ghostty ──────────────────────────────────────────────
