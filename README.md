@@ -62,6 +62,7 @@ What the menu holds (the letter in brackets picks the item directly):
 | Group | Items |
 |---|---|
 | Panes | split right `s` · split below `d` · zoom / unzoom `f` |
+| Claude | new window running Claude Code in the current directory `C` |
 | Layout | side by side `h` · stacked `v` · tiled grid `=` |
 | Text | scroll back / copy mode `c` · search this pane `/` · paste `p` · clipboard history `P` · save pane output to a file `S` |
 | Sessions `z` | detach `d` · switch `s` · new `n` · rename `r` · kill this session `X` · pick another session to kill `k` (only lists sessions nobody is attached to) · kill all others `K` |
@@ -70,7 +71,7 @@ What the menu holds (the letter in brackets picks the item directly):
 
 Window management is deliberately not in the menu: `Alt+n` new window, `Alt+1`–`5` or `Alt+←/→` to switch, `Alt+;` back to the previous one, and tmux's own `Ctrl+b ,` to rename.
 
-Direct keys worth knowing: `Alt+h/j/k/l` panes · `Alt+Shift+←/→/↑/↓` resize the current pane, neighbours shrink to match · `Alt+←/→` windows · `Alt+f` zoom · `Alt+d` detach · `Ctrl+b K` pick a session to kill. On macOS, Alt is Option.
+Direct keys worth knowing: `Alt+c` new window running Claude Code here · `Alt+h/j/k/l` panes · `Alt+Shift+←/→/↑/↓` resize the current pane, neighbours shrink to match · `Alt+←/→` windows · `Alt+f` zoom · `Alt+d` detach · `Ctrl+b K` pick a session to kill. On macOS, Alt is Option.
 
 Split a window and each pane gets a title bar — index, running command, path — with the active one in the accent colour. A single pane has no title bar, so it doesn't cost a row.
 
