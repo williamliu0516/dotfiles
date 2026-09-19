@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """从 tmux.conf 自动生成速查表 —— 绑定改了这里就跟着变。"""
-import re,os,shutil,unicodedata
+import re,os,sys,shutil,unicodedata
+ALT='Option+' if sys.platform=='darwin' else 'Alt+'   # Mac 键盘上 Alt 叫 Option
 CONF=os.path.expanduser('~/.config/tmux/tmux.conf')
 W=min(shutil.get_terminal_size((80,24)).columns, 78)
 
@@ -19,7 +20,7 @@ for line in open(CONF,encoding='utf-8'):
     if not m: continue
     flags,note,key=m.groups()
     key=key.strip('"')
-    key=key.replace('M-','Alt+').replace('C-','Ctrl+')
+    key=key.replace('M-',ALT).replace('C-','Ctrl+')
     (root if '-n' in flags.split() else pref).append((key,note))
 
 def block(title,items,hint):
@@ -45,6 +46,6 @@ for k,n in [("/","向下搜索"),("?","向上搜索"),("n / N","跳下一个 / �
             ("v","开始选择"),("y","复制并退出"),("g / G","跳到最顶 / 最底"),("q 或 Esc","退出")]:
     print(f"  {C['k']}{pad(k,16)}{C['r']}{C['d']}{n}{C['r']}")
 
-print(f"\n{C['m']}  记不住？{C['r']}{C['k']}Alt+m{C['r']}{C['m']} 开菜单，全部操作都在里面挑。{C['r']}\n")
+print(f"\n{C['m']}  记不住？{C['r']}{C['k']}{ALT}m{C['r']}{C['m']} 开菜单，全部操作都在里面挑。{C['r']}\n")
 try: input()
 except: pass

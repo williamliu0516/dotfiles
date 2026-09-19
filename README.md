@@ -49,13 +49,15 @@ Right-arrow accepts the greyed-out suggestion; Tab completes as usual. Up-arrow 
 
 On GNOME, `Ctrl+Enter` maximizes rather than going fullscreen: GNOME stops compositing what's behind a fullscreen window, which would kill the blur. With the auto-hiding top bar it looks the same.
 
-On macOS, Option works as Alt, so the tmux keys below are the same on both.
+On macOS, Option works as Alt, so the tmux keys below are the same on both. Ghostty's own Option+←/→ (word movement) is unbound so tmux gets them for window switching, as on Linux; outside tmux they still move by word. `Ctrl+←/→` is taken by Mission Control on macOS — turn off "Move left/right a space" in System Settings › Keyboard › Keyboard Shortcuts › Mission Control if you want it back in the shell.
+
+On macOS, `Ctrl+Enter` (or `Cmd+Enter`) uses non-native fullscreen: the window fills the screen on the current Space instead of moving to a new one, so the blur of what's behind it survives. Native fullscreen would put it on an empty Space with nothing to blur. Native macOS tabs don't work in this mode; use tmux windows.
 
 ### tmux
 
 You only need one key: **`Alt+m`** opens a menu with every action labelled — splits, windows, sessions, search, save output. **`Ctrl+b` `?`** shows a cheatsheet generated from the config itself, so it can't drift out of date.
 
-Direct keys worth knowing: `Alt+h/j/k/l` panes · `Alt+←/→` windows · `Alt+f` zoom · `Alt+d` detach.
+Direct keys worth knowing: `Alt+h/j/k/l` panes · `Alt+Shift+←/→/↑/↓` resize the current pane · `Alt+←/→` windows · `Alt+f` zoom · `Alt+d` detach. `Alt+m` again closes the menu. On macOS, Alt is Option.
 
 Split a window and each pane gets a title bar — index, running command, path — with the active one in the accent colour. A single pane has no title bar, so it doesn't cost a row.
 

@@ -154,4 +154,9 @@ fi
 echo
 echo "  · 重启 Ghostty（字体和配置生效）"
 echo "  · 新终端里首次进 zsh 会弹 powerlevel10k 向导（已带配置则跳过）"
-echo "  · 敲 tmux 启动；按 Alt+m 打开菜单，Ctrl+b ? 看速查表"
+if [ "$OS" = macos ]; then
+  echo "  · 敲 tmux 启动；按 Option+m 打开菜单（Option 就是 Alt），Ctrl+b ? 看速查表"
+  echo "  · Ctrl+Enter / Cmd+Enter 全屏；Ctrl+←/→ 被 Mission Control 占用，shell 里按词移动用 Option+←/→"
+else
+  echo "  · 敲 tmux 启动；按 Alt+m 打开菜单，Ctrl+b ? 看速查表"
+fi

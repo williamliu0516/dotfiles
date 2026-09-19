@@ -63,6 +63,11 @@ bindkey '^[OB' history-substring-search-down
 
 bindkey '^[[1;5C' forward-word         # Ctrl+→
 bindkey '^[[1;5D' backward-word        # Ctrl+←
+# macOS：Ctrl+←/→ 被系统的 Mission Control（切换 Space）抢走，用 Option+←/→ 按词移动。
+# macos.ghostty 解绑了 Ghostty 自带的 Option+←/→ → Esc b/f，所以这里收到的是原始序列；
+# tmux 里这两个键被 tmux 拿去切窗口（和 Linux 的 Alt+←/→ 一样），只在 tmux 外生效。
+bindkey '^[[1;3C' forward-word         # Option+→（macOS）/ Alt+→（Linux，tmux 外）
+bindkey '^[[1;3D' backward-word        # Option+←
 bindkey '^H'  backward-kill-word       # Ctrl+Backspace
 bindkey '^[[3~' delete-char
 
@@ -130,3 +135,7 @@ fi
 # ===== 提示符 =====
 source "$ZPLUG/powerlevel10k/powerlevel10k.zsh-theme"
 [[ -f "$ZCONF/.p10k.zsh" ]] && source "$ZCONF/.p10k.zsh"
+
+# ===== 本机专属（不进仓库）=====
+# ZDOTDIR 指向 ~/.config/zsh 之后 ~/.zshrc 不再被读取；机器专属的 PATH、密钥等放这个文件
+[[ -f "$ZCONF/local.zsh" ]] && source "$ZCONF/local.zsh"

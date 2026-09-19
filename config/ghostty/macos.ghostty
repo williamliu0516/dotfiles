@@ -8,3 +8,19 @@ macos-titlebar-style = hidden
 
 # 让 Option 当 Alt 用：tmux 的 Alt+m 菜单、Alt+h/j/k/l 切窗格都靠它
 macos-option-as-alt = true
+
+# ===== 全屏 =====
+# Cmd+Enter / Ctrl+Cmd+F 默认是原生全屏：窗口被搬进一个新 Space，背后没有桌面可以透，毛玻璃就没了。
+# 改成非原生全屏：留在当前 Space，只是铺满屏幕并藏掉菜单栏，半透明和模糊照旧。
+# padded-notch：刘海周围留空，第一行文字不会躲到刘海后面；没刘海的机器和 true 一样。
+# （Linux 用的 toggle_maximize 在 macOS 上是空操作，不能照搬。）
+macos-non-native-fullscreen = padded-notch
+# Ctrl+Enter 在 macOS 上默认没绑定，补上，和 Linux 同一个键；Cmd+Enter 仍然可用
+keybind = ctrl+enter=toggle_fullscreen
+
+# ===== 把 Option+←/→ 原样交给 tmux =====
+# Ghostty 在 macOS 上默认把 Option+←/→ 改写成 Esc b / Esc f（按词移动），
+# tmux 收到的是 M-b / M-f 而不是 M-Left / M-Right，Alt+←/→ 切窗口就失效了。
+# 解绑后它们和 Linux 一样送出 \e[1;3D / \e[1;3C；tmux 外的按词移动由 zshrc 单独绑这两个序列。
+keybind = alt+arrow_left=unbind
+keybind = alt+arrow_right=unbind
