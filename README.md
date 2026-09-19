@@ -65,13 +65,13 @@ What the menu holds (the letter in brackets picks the item directly):
 | Tools | Claude Code in a new window `C` · pick a Claude session to resume `r` · continue the last Claude session `c` · yazi `y` · lazygit `g` (each in its own window, closes when you quit) |
 | Layout | side by side `\|` · stacked `_` · tiled grid `=` |
 | Text | scroll back / copy mode `v` · search this pane `/` · paste `p` · clipboard history `P` · save pane output to a file `S` |
-| Sessions `z` | detach `d` · switch `s` · new `n` · rename `r` · kill this session `X` · pick another session to kill `k` (only lists sessions nobody is attached to) · kill all others `K` |
+| Sessions `z` | detach `d` · switch session / open project `s` · new `n` · rename `r` · kill this session `X` · pick another session to kill `k` (only lists sessions nobody is attached to) · kill all others `K` |
 | Close | kill pane `x` · kill window `X` |
 | | cheatsheet `?` · close menu `Alt+m` |
 
 Window management is deliberately not in the menu: `Alt+n` new window, `Alt+1`–`5` or `Alt+←/→` to switch, `Alt+;` back to the previous one, and tmux's own `Ctrl+b ,` to rename.
 
-Direct keys worth knowing: `Alt+c` Claude Code here · `Alt+y` yazi · `Alt+g` lazygit · `Alt+h/j/k/l` panes · `Alt+Shift+←/→/↑/↓` resize the current pane, neighbours shrink to match · `Alt+←/→` windows · `Alt+f` zoom · `Alt+d` detach · `Ctrl+b K` pick a session to kill. On macOS, Alt is Option.
+Direct keys worth knowing: `Alt+s` session / project switcher (fzf over open sessions and your project folders; picking a folder starts a session named after it; list your roots one per line in `~/.config/tmux/projects`, default `~/projects ~/code ~/src ~/dev ~/.dotfiles`) · `Alt+c` Claude Code here · `Alt+y` yazi · `Alt+g` lazygit · `Alt+h/j/k/l` panes · `Alt+Shift+←/→/↑/↓` resize the current pane, neighbours shrink to match · `Alt+←/→` windows · `Alt+f` zoom · `Alt+d` detach · `Ctrl+b K` pick a session to kill. On macOS, Alt is Option.
 
 Split a window and each pane gets a title bar — index, running command, path — with the active one in the accent colour. A single pane has no title bar, so it doesn't cost a row.
 
