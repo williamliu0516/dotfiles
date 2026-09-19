@@ -43,9 +43,22 @@ compinit -d "$ZCONF/.zcompdump" -C
 zmodload zsh/complist
 _comp_options+=(globdots)
 zstyle ':completion:*' matcher-list '' 'm:{a-zA-Z}={A-Za-z}' 'r:|[._-]=* r:|=*'
-zstyle ':completion:*' menu select
+zstyle ':completion:*' menu no          # 菜单交给 fzf-tab
 zstyle ':completion:*' list-colors "${(s.:.)LS_COLORS}"
 zstyle ':completion:*:descriptions' format '[%d]'
+
+# ===== fzf-tab：Tab 补全菜单换成 fzf，任何补全都能模糊筛 =====
+# 必须在 compinit 之后、autosuggestions / syntax-highlighting 之前加载
+if [[ -r "$ZPLUG/fzf-tab/fzf-tab.plugin.zsh" ]]; then
+  source "$ZPLUG/fzf-tab/fzf-tab.plugin.zsh"
+  zstyle ':fzf-tab:*' fzf-flags --height=50% --border=rounded   # 和 FZF_DEFAULT_OPTS 的配色一致
+  zstyle ':fzf-tab:*' switch-group '<' '>'                      # 多组候选（文件 / 选项）用 < > 切
+  zstyle ':fzf-tab:*' continuous-trigger '/'                     # 补目录时敲 / 直接进下一层继续补
+  # 预览：目录看一层内容，文件看开头
+  zstyle ':fzf-tab:complete:(cd|z|ls|eza|cat|bat|nvim|vim|code):*' fzf-preview \
+    '[[ -d $realpath ]] && eza -1 --color=always --icons=always $realpath || bat --color=always --style=plain --line-range=:80 $realpath 2>/dev/null'
+  zstyle ':fzf-tab:complete:git-(checkout|switch|merge|rebase):*' fzf-preview 'git log --oneline -8 --color=always $word 2>/dev/null'
+fi
 
 # ===== 插件 =====
 # 自动建议的灰字颜色：明显暗于正文，一眼看出是建议而非已输入
@@ -71,7 +84,7 @@ bindkey '^[[1;3D' backward-word        # Option+←
 bindkey '^H'  backward-kill-word       # Ctrl+Backspace
 bindkey '^[[3~' delete-char
 
-# ===== fzf：Ctrl+R 模糊搜历史，Ctrl+T 选文件，Alt+C 跳目录（tmux 外），cd ** Tab 补目录 =====
+# ===== fzf：Ctrl+R 模糊搜历史，Ctrl+T 选文件，Alt+C 跳目录（tmux 外）=====
 # Ubuntu 上 fd 叫 fdfind、bat 叫 batcat；预览命令在子 shell 里跑，别名不生效，所以用变量
 _FD=fd;   command -v fd  >/dev/null || { command -v fdfind >/dev/null && _FD=fdfind; }
 _BAT=bat; command -v bat >/dev/null || { command -v batcat >/dev/null && _BAT=batcat; }
@@ -84,8 +97,6 @@ if command -v fzf >/dev/null; then
     export FZF_DEFAULT_COMMAND="$_FD --type f --hidden --follow --exclude .git"
     export FZF_CTRL_T_COMMAND="$FZF_DEFAULT_COMMAND"
     export FZF_ALT_C_COMMAND="$_FD --type d --hidden --follow --exclude .git"
-    _fzf_compgen_path() { "$_FD" --hidden --follow --exclude .git . "$1"; }   # foo ** Tab
-    _fzf_compgen_dir()  { "$_FD" --type d --hidden --follow --exclude .git . "$1"; }   # cd ** Tab
   fi
   # 右侧预览：文件用 bat 看前 200 行，目录用 eza 看一层，历史显示完整命令
   export FZF_CTRL_T_OPTS="--preview '$_BAT --color=always --style=numbers --line-range=:200 {} 2>/dev/null || ls -la {}' --preview-window=right:55%"

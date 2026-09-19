@@ -123,6 +123,7 @@ clone_plugin https://github.com/zsh-users/zsh-autosuggestions            zsh-aut
 clone_plugin https://github.com/zdharma-continuum/fast-syntax-highlighting fast-syntax-highlighting
 clone_plugin https://github.com/zsh-users/zsh-history-substring-search   zsh-history-substring-search
 clone_plugin https://github.com/romkatv/powerlevel10k                    powerlevel10k
+clone_plugin https://github.com/Aloxaf/fzf-tab                          fzf-tab
 
 # ── 5. tmux 插件 ────────────────────────────────────────────
 info "安装 tmux 插件"
