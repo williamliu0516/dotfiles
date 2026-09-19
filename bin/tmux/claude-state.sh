@@ -31,3 +31,9 @@ case "$event" in
 esac
 
 tmux set-option -w -t "$TMUX_PANE" @agent-state "$state" 2>/dev/null || true
+
+# 等你批准时弹桌面通知，但只在你没在看这个窗口时（窗口不是当前窗口，或 Ghostty 不在前台）
+if [[ "$state" == waiting ]] && command -v "$HOME/.local/bin/notify" >/dev/null 2>&1; then
+  where="$(tmux display -p -t "$TMUX_PANE" '#{session_name} · #{window_index}:#{window_name}' 2>/dev/null || true)"
+  "$HOME/.local/bin/notify" --if-away "Claude Code 在等你" "$where" &
+fi

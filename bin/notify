@@ -1,0 +1,31 @@
+#!/usr/bin/env bash
+# 桌面通知：notify [--if-away] 标题 正文
+# --if-away：只在你没在看这个终端时才弹——tmux 里这个窗口不是当前窗口，或者 Ghostty 不在前台。
+# macOS 用 osascript，Linux 用 notify-send（libnotify-bin）；都没有就静默退出。
+set -u
+away_only=0
+[ "${1:-}" = --if-away ] && { away_only=1; shift; }
+title="${1:-通知}"; body="${2:-}"
+
+if [ "$away_only" = 1 ]; then
+  looking=1
+  if [ -n "${TMUX_PANE:-}" ] && command -v tmux >/dev/null 2>&1; then
+    # 窗口不是它所在会话的当前窗口，或者会话没人连着 → 没在看
+    st=$(tmux display -p -t "$TMUX_PANE" '#{window_active}#{session_attached}' 2>/dev/null || echo 11)
+    case "$st" in 1[1-9]*) ;; *) looking=0 ;; esac
+  fi
+  if [ "$looking" = 1 ] && [ "$(uname -s)" = Darwin ]; then
+    # 前台应用不是 Ghostty → 没在看（lsappinfo 不需要任何权限，几毫秒）
+    front=$(lsappinfo info -only name "$(lsappinfo front 2>/dev/null)" 2>/dev/null | sed 's/.*="\(.*\)"/\1/')
+    [ "$front" = "${TERM_APP_NAME:-Ghostty}" ] || looking=0
+  fi
+  [ "$looking" = 1 ] && exit 0
+fi
+
+if [ "$(uname -s)" = Darwin ]; then
+  t=${title//\"/\\\"}; b=${body//\"/\\\"}
+  osascript -e "display notification \"$b\" with title \"$t\"" >/dev/null 2>&1
+elif command -v notify-send >/dev/null 2>&1; then
+  notify-send -a Ghostty "$title" "$body" >/dev/null 2>&1
+fi
+exit 0

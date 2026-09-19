@@ -147,6 +147,28 @@ fi
 source "$ZPLUG/powerlevel10k/powerlevel10k.zsh-theme"
 [[ -f "$ZCONF/.p10k.zsh" ]] && source "$ZCONF/.p10k.zsh"
 
+# ===== 长命令结束通知：超过 30 秒的命令跑完时，如果你没在看这个终端就弹一条 =====
+# 交互式程序（编辑器、分页器、tmux、ssh…）本来就要人盯着，不算
+NOTIFY_AFTER=30
+NOTIFY_IGNORE='^(vim?|nvim|nano|less|more|man|tmux|ssh|mosh|top|htop|btop|yazi|lazygit|claude|fzf|python3?|node|irb|git (log|diff|show|commit|rebase)|y|z|cd|ls)( |$)'
+_notify_preexec() { _notify_cmd=$1; _notify_t0=$EPOCHSECONDS; }
+_notify_precmd() {
+  local rc=$? t0=${_notify_t0:-} cmd=${_notify_cmd:-}
+  _notify_t0=; _notify_cmd=
+  [[ -z $t0 ]] && return
+  local dt=$(( EPOCHSECONDS - t0 ))
+  (( dt < NOTIFY_AFTER )) && return
+  [[ $cmd =~ $NOTIFY_IGNORE ]] && return
+  local title="命令完成（${dt}s）"; (( rc != 0 )) && title="命令失败（退出码 $rc，${dt}s）"
+  "$HOME/.local/bin/notify" --if-away "$title" "${cmd:0:80}" &!
+}
+if [[ -x "$HOME/.local/bin/notify" ]]; then
+  zmodload zsh/datetime
+  autoload -Uz add-zsh-hook
+  add-zsh-hook preexec _notify_preexec
+  add-zsh-hook precmd  _notify_precmd
+fi
+
 # ===== 本机专属（不进仓库）=====
 # ZDOTDIR 指向 ~/.config/zsh 之后 ~/.zshrc 不再被读取；机器专属的 PATH、密钥等放这个文件
 [[ -f "$ZCONF/local.zsh" ]] && source "$ZCONF/local.zsh"

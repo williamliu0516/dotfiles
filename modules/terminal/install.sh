@@ -12,9 +12,10 @@ info "安装系统包"
 if [ "$OS" = macos ]; then
   # zsh 用系统自带的 /bin/zsh（已是默认 shell），不另装 brew 版
   # poppler 提供 pdftoppm，yazi 靠它渲染 PDF 预览
-  pkg_install tmux fzf eza bat zoxide yazi lazygit poppler
+  pkg_install tmux fzf eza bat zoxide yazi lazygit poppler btop
 else
-  pkg_install zsh tmux git curl unzip fontconfig fzf eza bat zoxide ca-certificates poppler-utils
+  # libnotify-bin 提供 notify-send，桌面通知用
+  pkg_install zsh tmux git curl unzip fontconfig fzf eza bat zoxide ca-certificates poppler-utils btop libnotify-bin
   # yazi 不在 Ubuntu 的源里，装官方发布的 .deb
   if have yazi; then
     ok "yazi 已安装"
@@ -147,12 +148,14 @@ link "$DOTFILES/config/ghostty/config.ghostty"    "$HOME/.config/ghostty/config.
 link "$DOTFILES/config/ghostty/$OS.ghostty"       "$HOME/.config/ghostty/platform.ghostty"
 link "$DOTFILES/config/ghostty/themes"            "$HOME/.config/ghostty/themes"
 link "$DOTFILES/config/ghostty/shaders"           "$HOME/.config/ghostty/shaders"
+link "$DOTFILES/config/yazi/yazi.toml"            "$HOME/.config/yazi/yazi.toml"
 mkdir -p "$HOME/.local/bin/tmux"
 link "$DOTFILES/bin/theme-preview"                "$HOME/.local/bin/theme-preview"
+link "$DOTFILES/bin/notify"                       "$HOME/.local/bin/notify"
 for f in "$DOTFILES"/bin/tmux/*.sh; do
   link "$f" "$HOME/.local/bin/tmux/$(basename "$f")"
 done
-chmod +x "$DOTFILES"/bin/theme-preview "$DOTFILES"/bin/tmux/*.sh 2>/dev/null || true
+chmod +x "$DOTFILES"/bin/theme-preview "$DOTFILES"/bin/notify "$DOTFILES"/bin/tmux/*.sh 2>/dev/null || true
 
 # ── 7. Ghostty 毛玻璃（GNOME，仅在装了 Blur my Shell 时）──────
 # GNOME 不支持 Ghostty 自己的 background-blur，只能让 Blur my Shell 模糊它背后。
