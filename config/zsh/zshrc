@@ -71,10 +71,26 @@ bindkey '^[[1;3D' backward-word        # Option+←
 bindkey '^H'  backward-kill-word       # Ctrl+Backspace
 bindkey '^[[3~' delete-char
 
-# ===== fzf：Ctrl+R 模糊搜历史，Ctrl+T 选文件 =====
+# ===== fzf：Ctrl+R 模糊搜历史，Ctrl+T 选文件，Alt+C 跳目录（tmux 外），cd ** Tab 补目录 =====
+# Ubuntu 上 fd 叫 fdfind、bat 叫 batcat；预览命令在子 shell 里跑，别名不生效，所以用变量
+_FD=fd;   command -v fd  >/dev/null || { command -v fdfind >/dev/null && _FD=fdfind; }
+_BAT=bat; command -v bat >/dev/null || { command -v batcat >/dev/null && _BAT=batcat; }
+command -v fdfind >/dev/null && ! command -v fd >/dev/null && alias fd=fdfind
 if command -v fzf >/dev/null; then
   export FZF_DEFAULT_OPTS="--reverse --height=40% --border=rounded \
     --color=bg+:#283457,fg+:#c0caf5,hl:#7aa2f7,hl+:#7dcfff,prompt:#7aa2f7,pointer:#bb9af7,info:#565f89"
+  if command -v "$_FD" >/dev/null; then
+    # 用 fd 列文件：快，跟随 .gitignore，含隐藏文件但跳过 .git
+    export FZF_DEFAULT_COMMAND="$_FD --type f --hidden --follow --exclude .git"
+    export FZF_CTRL_T_COMMAND="$FZF_DEFAULT_COMMAND"
+    export FZF_ALT_C_COMMAND="$_FD --type d --hidden --follow --exclude .git"
+    _fzf_compgen_path() { "$_FD" --hidden --follow --exclude .git . "$1"; }   # foo ** Tab
+    _fzf_compgen_dir()  { "$_FD" --type d --hidden --follow --exclude .git . "$1"; }   # cd ** Tab
+  fi
+  # 右侧预览：文件用 bat 看前 200 行，目录用 eza 看一层，历史显示完整命令
+  export FZF_CTRL_T_OPTS="--preview '$_BAT --color=always --style=numbers --line-range=:200 {} 2>/dev/null || ls -la {}' --preview-window=right:55%"
+  export FZF_ALT_C_OPTS="--preview 'eza --tree --level=1 --color=always --icons=always {} 2>/dev/null || ls {}'"
+  export FZF_CTRL_R_OPTS="--preview 'echo {}' --preview-window=down:3:wrap"
   if fzf --zsh >/dev/null 2>&1; then
     source <(fzf --zsh)
   else

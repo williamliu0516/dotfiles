@@ -32,8 +32,14 @@ esac
 
 tmux set-option -w -t "$TMUX_PANE" @agent-state "$state" 2>/dev/null || true
 
-# 等你批准时弹桌面通知，但只在你没在看这个窗口时（窗口不是当前窗口，或 Ghostty 不在前台）
-if [[ "$state" == waiting ]] && command -v "$HOME/.local/bin/notify" >/dev/null 2>&1; then
+# 等你批准 / 跑完 / 出错时弹桌面通知，但只在你没在看这个窗口时（窗口不是当前窗口，或 Ghostty 不在前台）
+case "$state" in
+  waiting) title="Claude Code 在等你" ;;
+  done)    title="Claude Code 完成了" ;;
+  error)   title="Claude Code 出错了" ;;
+  *)       title="" ;;
+esac
+if [[ -n "$title" ]] && [[ -x "$HOME/.local/bin/notify" ]]; then
   where="$(tmux display -p -t "$TMUX_PANE" '#{session_name} · #{window_index}:#{window_name}' 2>/dev/null || true)"
-  "$HOME/.local/bin/notify" --if-away "Claude Code 在等你" "$where" &
+  "$HOME/.local/bin/notify" --if-away "$title" "$where" &
 fi

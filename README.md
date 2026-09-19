@@ -41,11 +41,11 @@ Every module is safe to re-run: it skips what's already there and backs up anyth
 | **Terminal** | Ghostty — `snappy` theme (dark/light, follows the system), Maple Mono NF CN, cursor-trail shader (off — it keeps a core 18% busy while idle), semi-transparent with a frosted-glass blur of the real desktop (Ghostty's own blur on macOS, Blur my Shell on GNOME) |
 | **Shell** | zsh + powerlevel10k, autosuggestions, fast-syntax-highlighting, history prefix search |
 | **Multiplexer** | tmux — one menu key instead of a wall of shortcuts, sessions survive reboot |
-| **Tools** | eza, bat, zoxide, fzf, lazygit (`Alt+g`), btop (`Alt+b`), poppler for yazi's PDF preview, yazi (`y` in the shell drops you in the directory you quit from; `Alt+y` opens it in its own tmux window, since quitting from a popup stalls 5 s on yazi 26.x) |
+| **Tools** | eza, bat, zoxide, fzf with fd and ripgrep, lazygit (`Alt+g`), btop (`Alt+b`), poppler for yazi's PDF preview, yazi (`y` in the shell drops you in the directory you quit from; `Alt+y` opens it in its own tmux window, since quitting from a popup stalls 5 s on yazi 26.x) |
 
 ### Shell
 
-Right-arrow accepts the greyed-out suggestion; Tab completes as usual. Up-arrow filters history by what you've already typed. `Ctrl+R` fuzzy-searches all of it.
+Right-arrow accepts the greyed-out suggestion; Tab completes as usual. Up-arrow filters history by what you've already typed. `Ctrl+R` fuzzy-searches all of it, with the full command previewed below. `Ctrl+T` picks a file (fd lists them: fast, follows `.gitignore`, includes dotfiles) with a bat preview on the right; `Alt+C` outside tmux jumps to a directory; `cd **` then Tab completes directories through fzf.
 
 A command that runs longer than 30 seconds sends a desktop notification when it finishes (with the exit code if it failed), but only if you're not looking at that terminal. Editors, pagers, ssh and other interactive programs are excluded. `bin/notify` is the helper; `notify --if-away title body` from any script gets the same behaviour.
 
@@ -79,7 +79,7 @@ Direct keys worth knowing: `Alt+b` btop · `Alt+s` session / project switcher (f
 
 Split a window and each pane gets a title bar — index, running command, path — with the active one in the accent colour. A single pane has no title bar, so it doesn't cost a row.
 
-Window numbers are colour-coded by Claude Code state — cyan running, yellow needs approval, green done, red error. When any window is waiting on you, a yellow bell with the count appears at the left of the status bar, and a desktop notification fires if you're not looking at that window (it's not the current tmux window, or Ghostty isn't the front app).
+Window numbers are colour-coded by Claude Code state — cyan running, yellow needs approval, green done, red error. When any window is waiting on you, a yellow bell with the count appears at the left of the status bar, and a desktop notification fires when Claude is waiting, finished or failed, if you're not looking at that window (it's not the current tmux window, or Ghostty isn't the front app).
 
 Sessions auto-save every 15 minutes and restore on start (tmux-resurrect + continuum).
 
