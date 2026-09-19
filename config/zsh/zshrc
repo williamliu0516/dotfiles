@@ -174,6 +174,15 @@ fi
 source "$ZPLUG/powerlevel10k/powerlevel10k.zsh-theme"
 [[ -f "$ZCONF/.p10k.zsh" ]] && source "$ZCONF/.p10k.zsh"
 
+# ===== 速查表：Alt+/（Mac 上 Option+/）随时弹出，tmux 里用浮层，tmux 外用 less，q 关闭 =====
+cheat() {
+  if [[ -n $TMUX ]]; then tmux display-popup -w 80% -h 90% -E "$HOME/.local/bin/tmux/cheatsheet.sh"
+  else "$HOME/.local/bin/tmux/cheatsheet.sh" --no-wait | less -R; fi
+}
+_cheat_widget() { zle -I; cheat </dev/tty; zle reset-prompt; }
+zle -N _cheat_widget
+bindkey '^[/' _cheat_widget
+
 # ===== 长命令结束通知：超过 30 秒的命令跑完时，如果你没在看这个终端就弹一条 =====
 # 交互式程序（编辑器、分页器、tmux、ssh…）本来就要人盯着，不算
 NOTIFY_AFTER=30

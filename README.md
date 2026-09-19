@@ -59,7 +59,7 @@ On macOS, `Ctrl+Enter` (or `Cmd+Enter`) uses non-native fullscreen: the window f
 
 ### tmux
 
-You only need one key: **`Alt+m`** opens a menu with every action labelled; pressing it again closes the menu. **`Ctrl+b` `?`** shows a cheatsheet generated from the config itself, so it can't drift out of date.
+You only need one key: **`Alt+m`** opens a menu with every action labelled; pressing it again closes the menu. **`Ctrl+b` `?`**, or **`Alt+/`** anywhere in the shell (inside tmux or not), shows a cheatsheet covering the shell keys, the tmux keys and what happens automatically; the tmux part is generated from the config itself, so it can't drift out of date.
 
 What the menu holds (the letter in brackets picks the item directly):
 

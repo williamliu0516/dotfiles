@@ -2,6 +2,8 @@
 """从 tmux.conf 自动生成速查表 —— 绑定改了这里就跟着变。"""
 import re,os,sys,shutil,unicodedata
 ALT='Option+' if sys.platform=='darwin' else 'Alt+'   # Mac 键盘上 Alt 叫 Option
+MAC=sys.platform=='darwin'
+WAIT='--no-wait' not in sys.argv       # 走 less 时不用等按键
 CONF=os.path.expanduser('~/.config/tmux/tmux.conf')
 W=min(shutil.get_terminal_size((80,24)).columns, 78)
 
@@ -29,7 +31,29 @@ def block(title,items,hint):
     for k,n in items:
         print(f"  {C['k']}{pad(k,16)}{C['r']}{C['d']}{n}{C['r']}")
 
-print(f"\n{C['b']}  tmux 速查表{C['r']}   {C['m']}按 q 关闭{C['r']}")
+print(f"\n{C['b']}  速查表{C['r']}   {C['m']}按 q 关闭 · 随时按 {ALT}/ 打开这张表（tmux 内外都行）{C['r']}")
+
+block("shell（zsh）",[
+    ("→","接受灰色建议"),
+    ("Tab","fzf 补全：敲字母筛，/ 进下一层目录，< > 切组"),
+    ("↑ / ↓","按已输入的前缀筛历史"),
+    ("Ctrl+R","fzf 搜历史，下方预览完整命令"),
+    ("Ctrl+T","fzf 选文件，右侧 bat 预览"),
+    (ALT+"C","fzf 跳目录（tmux 外）"),
+    (ALT+"← / →","按词移动（tmux 外）"),
+    ("Ctrl+← / →","按词移动" + ("（Mac 上被 Mission Control 占用）" if MAC else "")),
+    ("Ctrl+Backspace","删一个词"),
+    ("y","yazi 文件管理器，退出时 cd 到停留目录"),
+    ("z 关键词","zoxide 按访问频率跳目录"),
+    ("cheat","打开这张表"),
+    ("tk","杀整个 tmux server"),
+],"")
+block("自动发生",[
+    ("命令 > 30 秒","结束时桌面通知（你没在看时）"),
+    ("Claude 等你 / 完成 / 出错","窗口号变色 + 桌面通知（你没在看时）"),
+    ("会话","每 15 分钟存档，重启后自动恢复"),
+],"")
+print(f"\n{C['b']}  tmux{C['r']}")
 block("免前缀（直接按）",root,"")
 block("前缀键",pref,"先按 Ctrl+b 松开，再按下面的键")
 
@@ -47,5 +71,6 @@ for k,n in [("/","向下搜索"),("?","向上搜索"),("n / N","跳下一个 / �
     print(f"  {C['k']}{pad(k,16)}{C['r']}{C['d']}{n}{C['r']}")
 
 print(f"\n{C['m']}  记不住？{C['r']}{C['k']}{ALT}m{C['r']}{C['m']} 开菜单，全部操作都在里面挑。{C['r']}\n")
-try: input()
-except: pass
+if WAIT:
+    try: input()
+    except: pass
