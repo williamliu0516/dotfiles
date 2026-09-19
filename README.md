@@ -121,6 +121,20 @@ To add a module, create `modules/<id>/install.sh` with the header comments; the 
 
 Everything is symlinked from `~/.dotfiles`, so edits in the repo are live. Existing files are backed up as `<name>.bak.<timestamp>` before being replaced.
 
+## Testing on Ubuntu from a Mac
+
+`dev/ubuntu.yaml` is a [Lima](https://lima-vm.io) definition for a headless Ubuntu 24.04 VM with `~/.dotfiles` mounted at the same path, read-write. Edit on the Mac, test in the VM, no pull needed.
+
+```bash
+brew install lima
+limactl start --name ubuntu ~/.dotfiles/dev/ubuntu.yaml          # first time: downloads the image
+limactl shell ubuntu -- env DOTFILES_DIR=/Users/$USER/.dotfiles bash /Users/$USER/.dotfiles/install.sh --only terminal,claude-tmux
+limactl shell ubuntu                                             # then: tmux, Alt+m, Ctrl+b ?
+limactl stop ubuntu                                              # limactl delete ubuntu to remove it
+```
+
+Open the shell from Ghostty on the Mac and the Alt keys travel through Ghostty into the VM's tmux, so the key bindings get a real test. What it can't test is GNOME itself — Blur my Shell, Ctrl+Enter maximize, the `gnome-desktop` module.
+
 ## Requirements
 
 - **Linux:** Debian/Ubuntu with `apt` and `sudo`. Ghostty comes from [`mkasberg/ghostty-ubuntu`](https://github.com/mkasberg/ghostty-ubuntu); the installer picks the `.deb` matching your release and architecture, falling back to the newest build for your architecture.

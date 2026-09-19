@@ -1,0 +1,28 @@
+# 在 Mac 上跑一台无头 Ubuntu，用来测 dotfiles 的 Linux 路径（安装脚本、tmux、zsh、速查表）。
+# GNOME 桌面相关的东西（Blur my Shell、Ctrl+Enter 最大化）这里测不了。
+#
+#   limactl start --name ubuntu ~/.dotfiles/dev/ubuntu.yaml   # 第一次
+#   limactl shell ubuntu                                       # 进去；从 Ghostty 里进去就能测 Alt 键位
+#   limactl stop ubuntu / limactl delete ubuntu
+#
+# ~/.dotfiles 以可写方式挂进虚拟机，路径和 Mac 上一样，所以 Mac 上改完不用 pull，Ubuntu 里直接就是新的。
+base: template://ubuntu-24.04
+vmType: vz
+cpus: 4
+memory: 4GiB
+disk: 20GiB
+# 基础模板会把整个 ~ 只读挂进来；必须先列它，再列 ~/.dotfiles，可写的那层才会盖在上面
+mounts:
+  - location: "~"
+    writable: false
+  - location: "~/.dotfiles"
+    writable: true
+  - location: "/tmp/lima"
+    writable: true
+provision:
+  - mode: system
+    script: |
+      #!/bin/bash
+      # 安装脚本要 sudo；Lima 的用户已免密。锁定本地时区 / 语言避免 apt 交互
+      export DEBIAN_FRONTEND=noninteractive
+      apt-get update -qq && apt-get install -y -qq git curl >/dev/null

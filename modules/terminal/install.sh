@@ -146,7 +146,12 @@ fi
 if [ "$CUR_SHELL" != "$ZSH_BIN" ]; then
   info "把登录 shell 改成 zsh"
   grep -qxF "$ZSH_BIN" /etc/shells || echo "$ZSH_BIN" | $SUDO tee -a /etc/shells >/dev/null
-  chsh -s "$ZSH_BIN" && ok "已改（下次登录生效）" || warn "chsh 失败，请手动: chsh -s $ZSH_BIN"
+  # 云镜像 / 虚拟机的用户常常没有密码但 sudo 免密：先试免密 sudo，不行再走会问密码的 chsh
+  if { [ -n "$SUDO" ] && $SUDO -n chsh -s "$ZSH_BIN" "$USER" 2>/dev/null; } || chsh -s "$ZSH_BIN"; then
+    ok "已改（下次登录生效）"
+  else
+    warn "chsh 失败，请手动: chsh -s $ZSH_BIN"
+  fi
 else
   ok "登录 shell 已是 zsh"
 fi
