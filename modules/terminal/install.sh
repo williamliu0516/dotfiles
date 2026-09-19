@@ -11,9 +11,10 @@ FONT_VER="${MAPLE_FONT_VERSION:-v7.9}"
 info "安装系统包"
 if [ "$OS" = macos ]; then
   # zsh 用系统自带的 /bin/zsh（已是默认 shell），不另装 brew 版
-  pkg_install tmux fzf eza bat zoxide yazi lazygit
+  # poppler 提供 pdftoppm，yazi 靠它渲染 PDF 预览
+  pkg_install tmux fzf eza bat zoxide yazi lazygit poppler
 else
-  pkg_install zsh tmux git curl unzip fontconfig fzf eza bat zoxide ca-certificates
+  pkg_install zsh tmux git curl unzip fontconfig fzf eza bat zoxide ca-certificates poppler-utils
   # yazi 不在 Ubuntu 的源里，装官方发布的 .deb
   if have yazi; then
     ok "yazi 已安装"

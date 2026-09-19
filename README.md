@@ -41,7 +41,7 @@ Every module is safe to re-run: it skips what's already there and backs up anyth
 | **Terminal** | Ghostty — `snappy` theme (dark/light, follows the system), Maple Mono NF CN, cursor-trail shader (off — it keeps a core 18% busy while idle), semi-transparent with a frosted-glass blur of the real desktop (Ghostty's own blur on macOS, Blur my Shell on GNOME) |
 | **Shell** | zsh + powerlevel10k, autosuggestions, fast-syntax-highlighting, history prefix search |
 | **Multiplexer** | tmux — one menu key instead of a wall of shortcuts, sessions survive reboot |
-| **Tools** | eza, bat, zoxide, fzf, lazygit (`Alt+g`), yazi (`y` in the shell drops you in the directory you quit from; `Alt+y` opens it in its own tmux window, since quitting from a popup stalls 5 s on yazi 26.x) |
+| **Tools** | eza, bat, zoxide, fzf, lazygit (`Alt+g`), poppler for yazi's PDF preview, yazi (`y` in the shell drops you in the directory you quit from; `Alt+y` opens it in its own tmux window, since quitting from a popup stalls 5 s on yazi 26.x) |
 
 ### Shell
 
