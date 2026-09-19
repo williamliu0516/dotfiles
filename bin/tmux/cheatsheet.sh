@@ -38,7 +38,7 @@ block("shell（zsh）",[
     ("Tab","fzf 补全：敲字母筛，/ 进下一层目录，< > 切组"),
     ("↑ / ↓","按已输入的前缀筛历史"),
     ("Ctrl+R","fzf 搜历史，下方预览完整命令"),
-    ("Ctrl+T","fzf 选文件，右侧 bat 预览"),
+    ("Ctrl+T","fzf 选文件，右侧 bat 预览；Ctrl+H 切换含隐藏文件"),
     (ALT+"C","fzf 跳目录（tmux 外）"),
     (ALT+"← / →","按词移动（tmux 外）"),
     ("Ctrl+← / →","按词移动" + ("（Mac 上被 Mission Control 占用）" if MAC else "")),

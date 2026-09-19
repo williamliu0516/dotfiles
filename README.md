@@ -45,7 +45,7 @@ Every module is safe to re-run: it skips what's already there and backs up anyth
 
 ### Shell
 
-Right-arrow accepts the greyed-out suggestion; Tab completes as usual. Up-arrow filters history by what you've already typed. `Ctrl+R` fuzzy-searches all of it, with the full command previewed below. `Ctrl+T` picks a file (fd lists them: fast, follows `.gitignore`, includes dotfiles) with a bat preview on the right; `Alt+C` outside tmux jumps to a directory. Tab itself opens fzf (fzf-tab): type a few letters to filter any completion — paths, git branches, ssh hosts, command options — with a preview of directories, files and branches; `/` while completing a path dives into the chosen directory.
+Right-arrow accepts the greyed-out suggestion; Tab completes as usual. Up-arrow filters history by what you've already typed. `Ctrl+R` fuzzy-searches all of it, with the full command previewed below. `Ctrl+T` picks a file (fd lists them: fast, follows `.gitignore`; `Ctrl+H` inside fzf toggles hidden files in) with a bat preview on the right; `Alt+C` outside tmux jumps to a directory. Tab itself opens fzf (fzf-tab): type a few letters to filter any completion — paths, git branches, ssh hosts, command options — with a preview of directories, files and branches; `/` while completing a path dives into the chosen directory.
 
 A command that runs longer than 30 seconds sends a desktop notification when it finishes (with the exit code if it failed), but only if you're not looking at that terminal. Editors, pagers, ssh and other interactive programs are excluded. `bin/notify` is the helper; `notify --if-away title body` from any script gets the same behaviour.
 

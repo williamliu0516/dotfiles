@@ -41,7 +41,7 @@ hash -d sc=$HOME/.local/bin
 autoload -Uz compinit
 compinit -d "$ZCONF/.zcompdump" -C
 zmodload zsh/complist
-_comp_options+=(globdots)
+# 不加 globdots：补全默认不列隐藏文件，敲了开头的 . 再 Tab 才列
 zstyle ':completion:*' matcher-list '' 'm:{a-zA-Z}={A-Za-z}' 'r:|[._-]=* r:|=*'
 zstyle ':completion:*' menu no          # 菜单交给 fzf-tab
 zstyle ':completion:*' list-colors "${(s.:.)LS_COLORS}"
@@ -92,16 +92,19 @@ command -v fdfind >/dev/null && ! command -v fd >/dev/null && alias fd=fdfind
 if command -v fzf >/dev/null; then
   export FZF_DEFAULT_OPTS="--reverse --height=40% --border=rounded \
     --color=bg+:#283457,fg+:#c0caf5,hl:#7aa2f7,hl+:#7dcfff,prompt:#7aa2f7,pointer:#bb9af7,info:#565f89"
+  # 用 fd 列文件：快，跟随 .gitignore。默认不含隐藏文件，fzf 里按 Ctrl+H 切换成包含
+  _FZF_HIDDEN_TOGGLE=""
   if command -v "$_FD" >/dev/null; then
-    # 用 fd 列文件：快，跟随 .gitignore，含隐藏文件但跳过 .git
-    export FZF_DEFAULT_COMMAND="$_FD --type f --hidden --follow --exclude .git"
+    export FZF_DEFAULT_COMMAND="$_FD --type f --follow --exclude .git"
     export FZF_CTRL_T_COMMAND="$FZF_DEFAULT_COMMAND"
-    export FZF_ALT_C_COMMAND="$_FD --type d --hidden --follow --exclude .git"
+    export FZF_ALT_C_COMMAND="$_FD --type d --follow --exclude .git"
+    _FZF_HIDDEN_TOGGLE="--bind 'ctrl-h:change-prompt(含隐藏 › )+reload($_FD --type f --hidden --follow --exclude .git)'"
+    _FZF_HIDDEN_TOGGLE_DIR="--bind 'ctrl-h:change-prompt(含隐藏 › )+reload($_FD --type d --hidden --follow --exclude .git)'"
   fi
-  # 右侧预览：文件用 bat 看前 200 行，目录用 eza 看一层，历史显示完整命令
-  export FZF_CTRL_T_OPTS="--preview '$_BAT --color=always --style=numbers --line-range=:200 {} 2>/dev/null || ls -la {}' --preview-window=right:55%"
-  export FZF_ALT_C_OPTS="--preview 'eza --tree --level=1 --color=always --icons=always {} 2>/dev/null || ls {}'"
-  export FZF_CTRL_R_OPTS="--preview 'echo {}' --preview-window=down:3:wrap"
+  # 右侧预览：文件用 bat 看前 200 行，目录用 eza 看一层；历史只显示命令，不显示序号
+  export FZF_CTRL_T_OPTS="--preview '$_BAT --color=always --style=numbers --line-range=:200 {} 2>/dev/null || ls -la {}' --preview-window=right:55% $_FZF_HIDDEN_TOGGLE"
+  export FZF_ALT_C_OPTS="--preview 'eza --tree --level=1 --color=always --icons=always {} 2>/dev/null || ls {}' ${_FZF_HIDDEN_TOGGLE_DIR:-}"
+  export FZF_CTRL_R_OPTS="--with-nth=2.. --preview 'echo {2..}' --preview-window=down:3:wrap"
   if fzf --zsh >/dev/null 2>&1; then
     source <(fzf --zsh)
   else
