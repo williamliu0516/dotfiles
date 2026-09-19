@@ -11,7 +11,7 @@ FONT_VER="${MAPLE_FONT_VERSION:-v7.9}"
 info "安装系统包"
 if [ "$OS" = macos ]; then
   # zsh 用系统自带的 /bin/zsh（已是默认 shell），不另装 brew 版
-  pkg_install tmux fzf eza bat zoxide yazi
+  pkg_install tmux fzf eza bat zoxide yazi lazygit
 else
   pkg_install zsh tmux git curl unzip fontconfig fzf eza bat zoxide ca-certificates
   # yazi 不在 Ubuntu 的源里，装官方发布的 .deb
@@ -29,6 +29,25 @@ else
       rm -rf "$TMPY"
     else
       warn "没有本架构的 yazi 包，跳过"
+    fi
+  fi
+  # lazygit 也不在源里：官方 tar.gz 里就一个二进制，放 ~/.local/bin
+  if have lazygit; then
+    ok "lazygit 已安装"
+  else
+    info "安装 lazygit（GitHub 发布的 tar.gz）"
+    case "$(dpkg --print-architecture)" in amd64) LARCH=x86_64 ;; arm64) LARCH=arm64 ;; *) LARCH="" ;; esac
+    LURL="$( [ -n "$LARCH" ] && curl -fsSL https://api.github.com/repos/jesseduffield/lazygit/releases/latest \
+            | grep -o "https://[^\"]*lazygit_[^\"]*_[Ll]inux_${LARCH}\.tar\.gz" | head -1 || true)"
+    if [ -n "$LURL" ]; then
+      TMPL="$(mktemp -d)"; mkdir -p "$HOME/.local/bin"
+      curl -fsSL "$LURL" | tar -xzf - -C "$TMPL" lazygit 2>/dev/null \
+        && install -m 755 "$TMPL/lazygit" "$HOME/.local/bin/lazygit" \
+        && ok "lazygit $("$HOME/.local/bin/lazygit" --version 2>/dev/null | grep -o 'version=[^,]*' || true)" \
+        || warn "lazygit 装不上，跳过"
+      rm -rf "$TMPL"
+    else
+      warn "没有本架构的 lazygit 包，跳过"
     fi
   fi
 fi

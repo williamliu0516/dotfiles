@@ -41,7 +41,7 @@ Every module is safe to re-run: it skips what's already there and backs up anyth
 | **Terminal** | Ghostty — `snappy` theme (dark/light, follows the system), Maple Mono NF CN, cursor-trail shader (off — it keeps a core 18% busy while idle), semi-transparent with a frosted-glass blur of the real desktop (Ghostty's own blur on macOS, Blur my Shell on GNOME) |
 | **Shell** | zsh + powerlevel10k, autosuggestions, fast-syntax-highlighting, history prefix search |
 | **Multiplexer** | tmux — one menu key instead of a wall of shortcuts, sessions survive reboot |
-| **Tools** | eza, bat, zoxide, fzf, yazi (`y` in the shell drops you in the directory you quit from; `Alt+y` opens it in its own tmux window, since quitting from a popup stalls 5 s on yazi 26.x) |
+| **Tools** | eza, bat, zoxide, fzf, lazygit (`Alt+g`), yazi (`y` in the shell drops you in the directory you quit from; `Alt+y` opens it in its own tmux window, since quitting from a popup stalls 5 s on yazi 26.x) |
 
 ### Shell
 
@@ -62,20 +62,20 @@ What the menu holds (the letter in brackets picks the item directly):
 | Group | Items |
 |---|---|
 | Panes | split right `s` · split below `d` · zoom / unzoom `f` |
-| Tools | new window running Claude Code in the current directory `C` · yazi file manager in its own window `y` |
-| Layout | side by side `h` · stacked `v` · tiled grid `=` |
-| Text | scroll back / copy mode `c` · search this pane `/` · paste `p` · clipboard history `P` · save pane output to a file `S` |
+| Tools | Claude Code in a new window `C` · pick a Claude session to resume `r` · continue the last Claude session `c` · yazi `y` · lazygit `g` (each in its own window, closes when you quit) |
+| Layout | side by side `\|` · stacked `_` · tiled grid `=` |
+| Text | scroll back / copy mode `v` · search this pane `/` · paste `p` · clipboard history `P` · save pane output to a file `S` |
 | Sessions `z` | detach `d` · switch `s` · new `n` · rename `r` · kill this session `X` · pick another session to kill `k` (only lists sessions nobody is attached to) · kill all others `K` |
 | Close | kill pane `x` · kill window `X` |
 | | cheatsheet `?` · close menu `Alt+m` |
 
 Window management is deliberately not in the menu: `Alt+n` new window, `Alt+1`–`5` or `Alt+←/→` to switch, `Alt+;` back to the previous one, and tmux's own `Ctrl+b ,` to rename.
 
-Direct keys worth knowing: `Alt+c` new window running Claude Code here · `Alt+h/j/k/l` panes · `Alt+Shift+←/→/↑/↓` resize the current pane, neighbours shrink to match · `Alt+←/→` windows · `Alt+f` zoom · `Alt+d` detach · `Ctrl+b K` pick a session to kill. On macOS, Alt is Option.
+Direct keys worth knowing: `Alt+c` Claude Code here · `Alt+y` yazi · `Alt+g` lazygit · `Alt+h/j/k/l` panes · `Alt+Shift+←/→/↑/↓` resize the current pane, neighbours shrink to match · `Alt+←/→` windows · `Alt+f` zoom · `Alt+d` detach · `Ctrl+b K` pick a session to kill. On macOS, Alt is Option.
 
 Split a window and each pane gets a title bar — index, running command, path — with the active one in the accent colour. A single pane has no title bar, so it doesn't cost a row.
 
-Window numbers are colour-coded by Claude Code state — cyan running, yellow needs approval, green done, red error.
+Window numbers are colour-coded by Claude Code state — cyan running, yellow needs approval, green done, red error. When any window is waiting on you, a yellow bell with the count appears at the left of the status bar.
 
 Sessions auto-save every 15 minutes and restore on start (tmux-resurrect + continuum).
 
