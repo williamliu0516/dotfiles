@@ -65,9 +65,9 @@ What the menu holds (the letter in brackets picks the item directly):
 
 | Group | Items |
 |---|---|
-| Panes | split right `s` · split below `d` · zoom / unzoom `f` |
+| Panes | new pane `s` · zoom / unzoom `f` |
 | Tools | Claude Code in a new window `C` · pick a Claude session to resume `r` · continue the last Claude session `c` · yazi `y` · lazygit `g` · btop `b` (each in its own window, closes when you quit) |
-| Layout | side by side `\|` · stacked `_` · tiled grid `=` |
+| Layout | make this the main pane `m` · auto-tiling on / off for this window `t` |
 | Text | scroll back / copy mode `v` · search this pane `/` · paste `p` · clipboard history `P` · save pane output to a file `S` |
 | Sessions `z` | detach `d` · switch session / open project `s` · new `n` · rename `r` · kill this session `X` · pick another session to kill `k` (only lists sessions nobody is attached to) · kill all others `K` |
 | Close | kill pane `x` · kill window `X` |
@@ -76,6 +76,8 @@ What the menu holds (the letter in brackets picks the item directly):
 Window management is deliberately not in the menu: `Alt+n` new window, `Alt+1`–`5` or `Alt+←/→` to switch, `Alt+;` back to the previous one, and tmux's own `Ctrl+b ,` to rename.
 
 Direct keys worth knowing: `Alt+b` btop · `Alt+s` session / project switcher (fzf over open sessions and your project folders; picking a folder starts a session named after it; list your roots one per line in `~/.config/tmux/projects`, default `~/projects ~/code ~/src ~/dev ~/.dotfiles`) · `Alt+c` Claude Code here · `Alt+y` yazi · `Alt+g` lazygit · `Alt+h/j/k/l` panes · `Alt+Shift+←/→/↑/↓` resize the current pane, neighbours shrink to match · `Alt+←/→` windows · `Alt+f` zoom · `Alt+d` detach · `Ctrl+b K` pick a session to kill. On macOS, Alt is Option.
+
+Panes tile themselves the way dwm does (idea borrowed from [ausbxuse's tmux config](https://github.com/ausbxuse/tmux)): one main pane on the left takes half the width, every other pane stacks top to bottom on the right, and the layout is redone whenever a pane opens or closes, however it was opened. `Alt+Space` opens a new pane at the bottom of the stack · `Alt+Enter` swaps the current pane with the main one (on the main pane, it swaps with the top of the stack) · `Alt+x` closes the pane · `Alt+t` turns tiling off for this window when you want a hand-made layout, and on again. Widen or narrow the main pane with `Alt+Shift+←/→` and later retiles keep that width.
 
 Split a window and each pane gets a title bar — index, running command, path — with the active one in the accent colour. A single pane has no title bar, so it doesn't cost a row.
 
