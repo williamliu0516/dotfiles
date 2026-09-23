@@ -22,14 +22,15 @@ for line in open(CONF,encoding='utf-8'):
     if not m: continue
     flags,note,key=m.groups()
     key=key.strip('"')
-    key=key.replace('M-',ALT).replace('C-','Ctrl+')
+    key=re.sub(r'^M-([A-Z])$',lambda m:'M-S-'+m.group(1).lower(),key)   # M-H 是 Option+Shift+h
+    key=key.replace('M-',ALT).replace('C-','Ctrl+').replace('S-','Shift+')
     (root if '-n' in flags.split() else pref).append((key,note))
 
 def block(title,items,hint):
     print(f"\n{C['t']}{title}{C['r']}  {C['m']}{hint}{C['r']}")
     print(f"{C['m']}{'─'*W}{C['r']}")
     for k,n in items:
-        print(f"  {C['k']}{pad(k,16)}{C['r']}{C['d']}{n}{C['r']}")
+        print(f"  {C['k']}{pad(k,18)}{C['r']}{C['d']}{n}{C['r']}")
 
 print(f"\n{C['b']}  速查表{C['r']}   {C['m']}按 q 关闭 · 随时按 {ALT}/ 打开这张表（tmux 内外都行）{C['r']}")
 
@@ -62,13 +63,13 @@ print(f"{C['m']}{'─'*W}{C['r']}")
 for k,n in [("单击窗格","切换焦点"),("拖拽窗格边框","调整大小"),
             ("单击顶栏窗口名","切到那个窗口"),("滚轮","翻历史（自动进复制模式）"),
             ("右键窗格 / 顶栏","弹出 tmux 自带菜单"),("拖选文字","自动复制到系统剪贴板")]:
-    print(f"  {C['k']}{pad(k,16)}{C['r']}{C['d']}{n}{C['r']}")
+    print(f"  {C['k']}{pad(k,18)}{C['r']}{C['d']}{n}{C['r']}")
 
 print(f"\n{C['t']}复制模式（滚轮或 PageUp 进入）{C['r']}")
 print(f"{C['m']}{'─'*W}{C['r']}")
 for k,n in [("/","向下搜索"),("?","向上搜索"),("n / N","跳下一个 / 上一个匹配"),
             ("v","开始选择"),("y","复制并退出"),("g / G","跳到最顶 / 最底"),("q 或 Esc","退出")]:
-    print(f"  {C['k']}{pad(k,16)}{C['r']}{C['d']}{n}{C['r']}")
+    print(f"  {C['k']}{pad(k,18)}{C['r']}{C['d']}{n}{C['r']}")
 
 print(f"\n{C['m']}  记不住？{C['r']}{C['k']}{ALT}m{C['r']}{C['m']} 开菜单，全部操作都在里面挑。{C['r']}\n")
 if WAIT:
