@@ -69,7 +69,7 @@ What the menu holds (the letter in brackets picks the item directly):
 |---|---|
 | Panes | new pane `s` · zoom / unzoom `f` |
 | Tools | Claude Code in a new window `C` · pick a Claude session to resume `r` · continue the last Claude session `c` · yazi `y` · lazygit `g` · btop `b` (each in its own window, closes when you quit) |
-| Layout | make this the main pane `m` · auto-tiling on / off for this window `t` |
+| Layout | make this the main pane `m` · auto-tiling on / off for this window `t` · cycle tiling mode row / dwm / grid / dwm2 `T` |
 | Text | scroll back / copy mode `v` · search this pane `/` · paste `p` · clipboard history `P` · save pane output to a file `S` |
 | Sessions `z` | detach `d` · switch session / open project `s` · new `n` · rename `r` · kill this session `X` · pick another session to kill `k` (only lists sessions nobody is attached to) · kill all others `K` |
 | Close | kill pane `x` · kill window `X` |
@@ -82,6 +82,8 @@ Direct keys worth knowing: `Alt+b` btop · `Alt+s` session / project switcher (f
 No Alt on your keyboard? Every `Alt+key` also works as `Ctrl+b` then the same key — the prefix table is mirrored from the Alt bindings at startup (`bin/tmux/alt-fallback.sh`), so it can't drift. Meant for iPad SSH clients, where iPadOS eats Option unless the app's "Option as Meta" switch is on (Termius: Profile › Settings › Keyboard; Moshi: keyboard settings). The mirror overrides a few tmux defaults in the prefix table: `n` is new window (not next), `;` previous window (not pane), `←/→` switch windows (not panes), `Space` new pane (not next layout), `x` kills without asking.
 
 Panes tile themselves the way dwm does (idea borrowed from [ausbxuse's tmux config](https://github.com/ausbxuse/tmux)): one main pane on the left takes half the width, every other pane stacks top to bottom on the right, and the layout is redone whenever a pane opens or closes, however it was opened. `Alt+Space` opens a new pane at the bottom of the stack · `Alt+Enter` swaps the current pane with the main one (on the main pane, it swaps with the top of the stack) · `Alt+x` closes the pane · `Alt+t` turns tiling off for this window when you want a hand-made layout, and on again. Widen or narrow the main pane with `Alt+Shift+←/→` and later retiles keep that width.
+
+`Alt+Shift+t` cycles the current window through the tiling modes (the menu has it under `T`): **row** (parallel, for a 32:9 ultrawide: every pane is a full-height column of equal width, side by side in one line, new panes appended at the right edge) → **dwm** → and, only when the window has exactly four panes, **grid** (2×2) → **dwm2** (main pane on the left, one pane top-right, the bottom-right split left / right) → back to row. With any other pane count the two four-pane modes fall back to dwm and come back once the window is at four panes again. `set -g @tiling-mode row` in the config makes row the default on that machine. `Alt+Enter` still swaps with the leftmost pane.
 
 Split a window and each pane gets a title bar — index, running command, path — with the active one in the accent colour. A single pane has no title bar, so it doesn't cost a row.
 
