@@ -57,7 +57,7 @@ block("自动发生",[
 print(f"\n{C['b']}  tmux{C['r']}")
 block("免前缀（直接按）",root,"")
 block("前缀键",pref,"先按 Ctrl+b 松开，再按下面的键")
-print(f"  {C['m']}键盘发不出 {ALT.rstrip("+")}（iPad 的 Termius / Moshi 等）：Ctrl+b 松开再按同一个键，等于上面任意 {ALT}键{C['r']}")
+print(f"  {C['m']}键盘发不出 {ALT.rstrip('+')}（iPad 的 Termius / Moshi 等）：Ctrl+b 松开再按同一个键，等于上面任意 {ALT}键{C['r']}")
 
 print(f"\n{C['t']}鼠标（已开启，这些完全不用记）{C['r']}")
 print(f"{C['m']}{'─'*W}{C['r']}")
