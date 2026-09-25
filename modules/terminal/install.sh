@@ -15,43 +15,42 @@ if [ "$OS" = macos ]; then
   # fd + ripgrep 给 fzf 用：列文件比 find 快得多，且自动跳过 .gitignore 里的东西
   pkg_install tmux mosh fzf eza bat zoxide yazi lazygit poppler btop fd ripgrep
 else
-  # libnotify-bin 提供 notify-send，桌面通知用；fd 在 Ubuntu 里叫 fd-find（命令是 fdfind）
-  pkg_install zsh tmux mosh git curl unzip fontconfig fzf eza bat zoxide ca-certificates poppler-utils btop libnotify-bin fd-find ripgrep
-  # yazi 不在 Ubuntu 的源里，装官方发布的 .deb
-  if have yazi; then
-    ok "yazi 已安装"
+  # Linux 上 apt 只装"必须是系统级"的东西：zsh（要写进 /etc/shells 当登录 shell）、mosh（ssh 远程命令
+  # 要能直接找到 mosh-server）、libnotify-bin（notify-send 走桌面的 D-Bus）、git/curl/fontconfig。
+  # 其余 CLI 工具全部交给 Nix + Home Manager（nix/home.nix）：版本锁在 flake.lock，和 Ubuntu 版本无关，
+  # 不用再为 22.04 的 fzf 太旧、eza 不在源里、yazi/lazygit 要抓 GitHub release 这些事写特判。
+  pkg_install zsh mosh git curl unzip fontconfig ca-certificates libnotify-bin xz-utils
+
+  # ── 1b. Nix ─────────────────────────────────────────────
+  NIX_SH=/nix/var/nix/profiles/default/etc/profile.d/nix-daemon.sh
+  if have nix; then
+    ok "Nix 已安装（$(nix --version 2>/dev/null | head -1)）"
+  elif [ -r "$NIX_SH" ]; then
+    . "$NIX_SH"; ok "Nix 已安装（$(nix --version 2>/dev/null | head -1)）"
   else
-    info "安装 yazi（GitHub 发布的 .deb）"
-    case "$(dpkg --print-architecture)" in amd64) YARCH=x86_64 ;; arm64) YARCH=aarch64 ;; *) YARCH="" ;; esac
-    YURL="$( [ -n "$YARCH" ] && curl -fsSL https://api.github.com/repos/sxyazi/yazi/releases/latest \
-            | grep -o "https://[^\"]*yazi-${YARCH}-unknown-linux-gnu\.deb" | head -1 || true)"
-    if [ -n "$YURL" ]; then
-      TMPY="$(mktemp -d)"
-      curl -fsSL -o "$TMPY/yazi.deb" "$YURL" && $SUDO apt-get install -y -qq "$TMPY/yazi.deb" >/dev/null 2>&1 \
-        && ok "yazi $(yazi --version 2>/dev/null | head -1 || true)" || warn "yazi 装不上，跳过"
-      rm -rf "$TMPY"
+    info "安装 Nix（Determinate 安装器；卸载：/nix/nix-installer uninstall）"
+    # 没有 systemd 的环境（Docker、老的 WSL）装不了 nix-daemon 服务，用单用户模式
+    NIX_INIT=""; [ -d /run/systemd/system ] || NIX_INIT="--init none"
+    if curl --proto '=https' --tlsv1.2 -fsSL https://install.determinate.systems/nix \
+         | sh -s -- install linux --no-confirm $NIX_INIT; then
+      . "$NIX_SH"; ok "Nix $(nix --version 2>/dev/null | head -1)"
     else
-      warn "没有本架构的 yazi 包，跳过"
+      die "Nix 安装失败。可以手动装：curl -fsSL https://install.determinate.systems/nix | sh -s -- install，然后重跑本脚本"
     fi
   fi
-  # lazygit 也不在源里：官方 tar.gz 里就一个二进制，放 ~/.local/bin
-  if have lazygit; then
-    ok "lazygit 已安装"
+
+  # ── 1c. Home Manager：装 CLI 工具和字体 ────────────────────
+  info "Home Manager：安装 CLI 工具链（首次会下载几百 MB，yazi 要从源码编译几分钟）"
+  # -b bak：Home Manager 要接管的文件如果已存在（比如旧的 fontconfig），改名成 *.bak 而不是报错
+  if nix run "path:$DOTFILES/nix#home-manager" -- switch --flake "path:$DOTFILES/nix#linux" --impure -b bak; then
+    [ -r "$HOME/.nix-profile/etc/profile.d/hm-session-vars.sh" ] && . "$HOME/.nix-profile/etc/profile.d/hm-session-vars.sh"
+    export PATH="$HOME/.nix-profile/bin:$PATH"
+    ok "工具链：$(for t in tmux fzf eza bat zoxide yazi lazygit btop fd rg; do have $t && printf '%s ' "$t"; done)"
+    # 只清没人引用的 store 路径（编译 yazi 用的 Rust 工具链等，约 2-3 GB）；已装的生成代不受影响
+    nix store gc >/dev/null 2>&1 || true
   else
-    info "安装 lazygit（GitHub 发布的 tar.gz）"
-    case "$(dpkg --print-architecture)" in amd64) LARCH=x86_64 ;; arm64) LARCH=arm64 ;; *) LARCH="" ;; esac
-    LURL="$( [ -n "$LARCH" ] && curl -fsSL https://api.github.com/repos/jesseduffield/lazygit/releases/latest \
-            | grep -o "https://[^\"]*lazygit_[^\"]*_[Ll]inux_${LARCH}\.tar\.gz" | head -1 || true)"
-    if [ -n "$LURL" ]; then
-      TMPL="$(mktemp -d)"; mkdir -p "$HOME/.local/bin"
-      curl -fsSL "$LURL" | tar -xzf - -C "$TMPL" lazygit 2>/dev/null \
-        && install -m 755 "$TMPL/lazygit" "$HOME/.local/bin/lazygit" \
-        && ok "lazygit $("$HOME/.local/bin/lazygit" --version 2>/dev/null | grep -o 'version=[^,]*' || true)" \
-        || warn "lazygit 装不上，跳过"
-      rm -rf "$TMPL"
-    else
-      warn "没有本架构的 lazygit 包，跳过"
-    fi
+    warn "Home Manager 失败，CLI 工具没装上；其余配置照常安装。单独重试：home-manager switch --flake path:$DOTFILES/nix#linux --impure"
+    HM_FAILED=1
   fi
 fi
 
@@ -61,27 +60,18 @@ if have ghostty || [ -d /Applications/Ghostty.app ]; then
 elif [ "$OS" = macos ]; then
   info "安装 Ghostty（brew cask）"
   brew install -q --cask ghostty >/dev/null && ok "Ghostty" || warn "Ghostty 安装失败，其余配置照常安装"
+# Ubuntu 26.04 起 Ghostty 进了官方源。看 Candidate 而不是 apt-cache show：卸掉的第三方 .deb 会留下元数据，show 照样有输出
+elif apt-cache policy ghostty 2>/dev/null | grep -q 'Candidate: [0-9]' \
+     && { info "安装 Ghostty（apt）"; $SUDO apt-get install -y -qq ghostty >/dev/null 2>&1; }; then
+  ok "Ghostty $(ghostty --version 2>/dev/null | head -1 || true)"
+elif have snap; then
+  # Ghostty 是 GUI 程序，不走 Nix：Nix 装的图形程序在非 NixOS 上找不到系统 OpenGL 驱动，要套 nixGL 才能启动。
+  # snap 是 Ghostty 官方文档列出的 Ubuntu 安装方式，各版本通用，classic 模式不受沙箱限制，能读 ~/.config 和用户字体。
+  info "安装 Ghostty（snap，classic）"
+  $SUDO snap install ghostty --classic >/dev/null 2>&1 && ok "Ghostty $(ghostty --version 2>/dev/null | head -1 || true)" \
+    || warn "Ghostty snap 安装失败，其余配置照常安装。手动：sudo snap install ghostty --classic"
 else
-  info "安装 Ghostty（从 mkasberg/ghostty-ubuntu 的 .deb）"
-  . /etc/os-release
-  ARCH="$(dpkg --print-architecture)"
-  API="https://api.github.com/repos/mkasberg/ghostty-ubuntu/releases/latest"
-  # 优先精确匹配本机发行版号，否则退回该架构下最新的一个
-  URL="$(curl -fsSL "$API" \
-        | grep -o "https://[^\"]*ghostty_[^\"]*_${ARCH}_${VERSION_ID}\.deb" | head -1 || true)"
-  if [ -z "$URL" ]; then
-    URL="$(curl -fsSL "$API" | grep -o "https://[^\"]*ghostty_[^\"]*_${ARCH}_[^\"]*\.deb" | head -1 || true)"
-    [ -n "$URL" ] && warn "没有 $VERSION_ID 的构建，改用 $(basename "$URL")"
-  fi
-  if [ -n "$URL" ]; then
-    TMP="$(mktemp -d)"; trap 'rm -rf "$TMP"' EXIT
-    curl -fsSL -o "$TMP/ghostty.deb" "$URL"
-    $SUDO apt-get install -y -qq "$TMP/ghostty.deb" >/dev/null 2>&1 \
-      || { $SUDO dpkg -i "$TMP/ghostty.deb" >/dev/null 2>&1; $SUDO apt-get -f install -y -qq >/dev/null 2>&1; }
-    have ghostty && ok "Ghostty $(ghostty --version 2>/dev/null | head -1 || true)" || die "Ghostty 安装失败"
-  else
-    warn "找不到匹配的 .deb，跳过 Ghostty（其余配置照常安装）"
-  fi
+  warn "没有 apt 源里的 ghostty 也没有 snap，跳过 Ghostty。其他装法见 https://ghostty.org/docs/install/binary"
 fi
 
 # ── 3. 字体 ─────────────────────────────────────────────────
@@ -95,6 +85,7 @@ if [ "$OS" = macos ]; then
 elif fc-list 2>/dev/null | grep -i "Maple Mono NF CN" >/dev/null 2>&1; then
   ok "Maple Mono NF CN 已安装"
 else
+  # 正常情况字体已由 Home Manager 装好（nix/home.nix 的 maple-mono.NF-CN）；走到这里说明 HM 没成功，退回手动下载
   info "安装 Maple Mono NF CN（含中文 + Nerd 图标，约 150MB）"
   TMPF="$(mktemp -d)"
   curl -fsSL -o "$TMPF/f.zip" \
@@ -214,3 +205,4 @@ if [ "$OS" = macos ]; then
 else
   echo "  · 敲 tmux 启动；按 Alt+m 打开菜单，Ctrl+b ? 看速查表"
 fi
+[ -z "${HM_FAILED:-}" ]   # 工具链没装上就算模块失败，入口脚本会提示单独重跑

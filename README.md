@@ -115,6 +115,9 @@ install.sh           menu, then runs the chosen modules in order
 lib/common.sh        shared helpers (output, link, apt/brew)
 modules/<id>/install.sh
                      one per module; the header declares name, desc, os, needs
+nix/
+  flake.nix  pins nixpkgs + Home Manager (+ yazi main until nixpkgs passes 26.9.1); flake.lock is the version lock
+  home.nix   the Linux CLI tool list and the font; configs stay symlinked, not managed by Home Manager
 config/
   zsh/       zshrc, p10k.zsh, zshenv (PATH + locale for non-interactive shells: ssh commands, mosh-server)
   tmux/      tmux.conf
@@ -149,15 +152,28 @@ Open the shell from Ghostty on the Mac and the Alt keys travel through Ghostty i
 
 ## Requirements
 
-- **Linux:** Debian/Ubuntu with `apt` and `sudo`. Ghostty comes from [`mkasberg/ghostty-ubuntu`](https://github.com/mkasberg/ghostty-ubuntu); the installer picks the `.deb` matching your release and architecture, falling back to the newest build for your architecture.
+- **Linux:** Debian/Ubuntu with `apt` and `sudo`. apt installs only what has to be system-level (zsh as the login shell, mosh, `notify-send`, git, curl). Everything else in the Tools row comes from [Nix](https://nixos.org) + [Home Manager](https://github.com/nix-community/home-manager), pinned in `nix/flake.lock`, so every machine gets the same versions whatever its Ubuntu release. The installer sets up Nix with the [Determinate installer](https://github.com/DeterminateSystems/nix-installer) if it isn't there (`/nix/nix-installer uninstall` removes it). Ghostty is a GUI app and stays out of Nix (Nix-built GUI programs can't find the system's OpenGL drivers on non-NixOS): it comes from apt on Ubuntu 26.04+, otherwise the [official snap](https://ghostty.org/docs/install/binary) (`snap install ghostty --classic`).
 - **macOS:** [Homebrew](https://brew.sh) and the Xcode command line tools (`xcode-select --install`). Ghostty and the font come from brew casks; zsh stays the system `/bin/zsh`.
 
 ## Options
 
 ```bash
 DOTFILES_DIR=~/src/dotfiles  bash install.sh   # clone somewhere else
-MAPLE_FONT_VERSION=v7.8      bash install.sh   # pin the font version
+MAPLE_FONT_VERSION=v7.8      bash install.sh   # pin the font version (macOS / fallback download only; Linux gets it from nixpkgs)
 ```
+
+## Updating the Linux tools
+
+The versions are whatever `nix/flake.lock` says. To move every machine forward, update the lock on one, commit it, and re-run the installer (or `home-manager switch`) on the others:
+
+```bash
+cd ~/.dotfiles/nix
+nix flake update                                       # newest nixpkgs / Home Manager / yazi
+home-manager switch --flake path:.#linux --impure      # apply here
+home-manager generations                               # list previous states; each has a rollback script
+```
+
+To add a tool, put it in `home.packages` in `nix/home.nix` and switch. `--impure` is needed because `home.nix` reads `$USER` and `$HOME`, which is what lets one config serve any username.
 
 ## Notes
 

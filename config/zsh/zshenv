@@ -6,6 +6,15 @@ typeset -U path
 for d in /opt/homebrew/bin /opt/homebrew/sbin /usr/local/bin /home/linuxbrew/.linuxbrew/bin "$HOME/.local/bin"; do
   [ -d "$d" ] && path=("$d" $path)
 done
+# Linux 上 CLI 工具由 Nix + Home Manager 提供（nix/home.nix）。Nix 安装器只改 /etc/zsh/zshrc（交互 shell），
+# 这里补上，让 ssh 远程命令和脚本也能找到它们。hm-session-vars.sh 里是 Home Manager 的环境变量
+# （XDG 路径、它自己加的 PATH），源一次就够；HM 用 __HM_SESS_VARS_SOURCED 防重复。
+if [ -r "$HOME/.nix-profile/etc/profile.d/hm-session-vars.sh" ]; then
+  . "$HOME/.nix-profile/etc/profile.d/hm-session-vars.sh"
+fi
+for d in /nix/var/nix/profiles/default/bin "$HOME/.nix-profile/bin"; do
+  [ -d "$d" ] && path=("$d" $path)
+done
 # mosh-server 必须有 UTF-8 locale，客户端没带 LANG 过来时给个默认值
 if [ -z "${LANG:-}" ] && [ -z "${LC_ALL:-}" ]; then
   export LANG=en_US.UTF-8
