@@ -39,6 +39,14 @@ else
     fi
   fi
 
+  # 没有 systemd 的环境里没人拉起 nix-daemon，普通用户连不上 store（"opening lock file big-lock: Permission denied"）。
+  # 这里手动起一个，只在本次开机内有效；重复启动会因 socket 被占而自己退出，无害。
+  if [ ! -d /run/systemd/system ] && ! { have pgrep && pgrep -x nix-daemon >/dev/null 2>&1; }; then
+    $SUDO sh -c 'nohup /nix/var/nix/profiles/default/bin/nix-daemon >/dev/null 2>&1 &'
+    sleep 1
+    warn "这台机器没有 systemd，nix-daemon 已手动启动；以后每次开机要自己跑一次：sudo nix-daemon &"
+  fi
+
   # ── 1c. Home Manager：装 CLI 工具和字体 ────────────────────
   info "Home Manager：安装 CLI 工具链（首次会下载几百 MB，yazi 要从源码编译几分钟）"
   # -b bak：Home Manager 要接管的文件如果已存在（比如旧的 fontconfig），改名成 *.bak 而不是报错
