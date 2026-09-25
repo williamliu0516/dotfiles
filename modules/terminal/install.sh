@@ -156,6 +156,8 @@ link "$DOTFILES/config/ghostty/$OS.ghostty"       "$HOME/.config/ghostty/platfor
 link "$DOTFILES/config/ghostty/themes"            "$HOME/.config/ghostty/themes"
 link "$DOTFILES/config/ghostty/shaders"           "$HOME/.config/ghostty/shaders"
 link "$DOTFILES/config/yazi/yazi.toml"            "$HOME/.config/yazi/yazi.toml"
+link "$DOTFILES/config/yazi/init.lua"             "$HOME/.config/yazi/init.lua"
+link "$DOTFILES/config/yazi/plugins"              "$HOME/.config/yazi/plugins"
 mkdir -p "$HOME/.local/bin/tmux"
 link "$DOTFILES/bin/theme-preview"                "$HOME/.local/bin/theme-preview"
 link "$DOTFILES/bin/notify"                       "$HOME/.local/bin/notify"

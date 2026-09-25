@@ -49,7 +49,7 @@ Right-arrow accepts the greyed-out suggestion; Tab completes as usual. Up-arrow 
 
 A command that runs longer than 30 seconds sends a desktop notification when it finishes (with the exit code if it failed), but only if you're not looking at that terminal. Editors, pagers, ssh and other interactive programs are excluded. `bin/notify` is the helper; `notify --if-away title body` from any script gets the same behaviour.
 
-yazi shows hidden files, sorts directories first, gives the preview pane the most room, and shows sizes in the list (`config/yazi/yazi.toml`).
+yazi shows hidden files, gives the preview pane the most room, and shows sizes in the list (`config/yazi/yazi.toml`). The list is ordered regular directories → regular files → hidden directories → hidden files, each group newest first; yazi cannot do "hidden last" on its own, so `config/yazi/plugins/hidden-last.yazi` computes the order through yazi's custom sort (needs a build newer than 26.9.1 — on macOS a nightly lives in `~/.local/bin/yazi` until brew ships the next release).
 
 On GNOME, `Ctrl+Enter` maximizes rather than going fullscreen: GNOME stops compositing what's behind a fullscreen window, which would kill the blur. With the auto-hiding top bar it looks the same.
 

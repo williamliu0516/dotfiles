@@ -3,10 +3,15 @@
 [mgr]
 # 显示隐藏文件（.dotfiles、.config 这类经常要进）
 show_hidden = true
-# 目录排在文件前面；按修改时间倒序（最新的在最上面）
-sort_by = "mtime"
-sort_reverse = true
-sort_dir_first = true
+# 顺序：普通目录 → 普通文件 → 隐藏目录 → 隐藏文件，每组内按修改时间倒序（最新在上）。
+# yazi 自带的排序做不到"隐藏文件放最后"（作者拒了对应 PR），所以用 custom 排序 + plugins/hidden-last.yazi 算顺序。
+# custom 需要 26.9.1 之后的版本（brew 的 26.9.1 会报 unknown variant `custom`）；macOS 上目前装的是
+# ~/.local/bin/yazi（nightly），等 brew 出下一个版本后删掉它即可。
+# reverse / dir_first 必须关：插件已经把"目录在前、时间倒序"编进 rank 里，这两个开着会把顺序翻回去。
+sort_by = "custom"
+sort_reverse = false
+sort_dir_first = false
+sort_fallback = "natural"
 sort_sensitive = false
 # 三栏比例：父目录 / 当前目录 / 预览。预览给大一点，看代码和 PDF 舒服
 ratio = [1, 3, 4]
