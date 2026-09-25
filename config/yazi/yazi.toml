@@ -3,8 +3,9 @@
 [mgr]
 # 显示隐藏文件（.dotfiles、.config 这类经常要进）
 show_hidden = true
-# 目录排在文件前面；按自然顺序（file2 在 file10 前面）
-sort_by = "natural"
+# 目录排在文件前面；按修改时间倒序（最新的在最上面）
+sort_by = "mtime"
+sort_reverse = true
 sort_dir_first = true
 sort_sensitive = false
 # 三栏比例：父目录 / 当前目录 / 预览。预览给大一点，看代码和 PDF 舒服
