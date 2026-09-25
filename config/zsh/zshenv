@@ -19,3 +19,9 @@ done
 if [ -z "${LANG:-}" ] && [ -z "${LC_ALL:-}" ]; then
   export LANG=en_US.UTF-8
 fi
+# mosh-server 兜底：iPad 关掉窗口后 mosh-server 会一直等客户端回来，不会自己退出。
+# NETWORK_TMOUT：一周没联系自动退出。SIGNAL_TMOUT：收到 SIGUSR1 时，60 秒内有联系的不杀，
+# 于是 `pkill -USR1 -x mosh-server` 只清闲置的、保住正在用的那条（homeboard 的会话卡也用同样的判断）。
+# 只对之后新启动的 mosh-server 生效。
+export MOSH_SERVER_NETWORK_TMOUT=604800
+export MOSH_SERVER_SIGNAL_TMOUT=60
