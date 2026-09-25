@@ -51,6 +51,8 @@ A command that runs longer than 30 seconds sends a desktop notification when it 
 
 yazi shows hidden files, gives the preview pane the most room, and shows sizes in the list (`config/yazi/yazi.toml`). The list is ordered regular directories → regular files → hidden directories → hidden files, each group newest first; yazi cannot do "hidden last" on its own, so `config/yazi/plugins/hidden-last.yazi` computes the order through yazi's custom sort (needs a build newer than 26.9.1 — on macOS a nightly lives in `~/.local/bin/yazi` until brew ships the next release).
 
+btop draws no background of its own (`theme_background = false`), so the frosted glass shows through it like everywhere else, and its colours come from the same snappy palette as Ghostty (`config/btop/themes/`). btop can't follow the system's light/dark mode by itself and has no flag to pick a theme, so `bin/btop` (linked to `~/.local/bin/btop`, ahead of the real one) reads the system appearance at launch and starts btop with a copy of the config pointing at `snappy` or `snappy_light`. Settings changed inside btop aren't saved on exit; edit `config/btop/btop.conf` instead.
+
 On GNOME, `Ctrl+Enter` maximizes rather than going fullscreen: GNOME stops compositing what's behind a fullscreen window, which would kill the blur. With the auto-hiding top bar it looks the same.
 
 On macOS, Option works as Alt, so the tmux keys below are the same on both. Ghostty's own Option+←/→ (word movement) is unbound so tmux gets them for window switching, as on Linux; outside tmux they still move by word. `Ctrl+←/→` is taken by Mission Control on macOS — turn off "Move left/right a space" in System Settings › Keyboard › Keyboard Shortcuts › Mission Control if you want it back in the shell.

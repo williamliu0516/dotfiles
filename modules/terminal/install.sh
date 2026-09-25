@@ -157,13 +157,17 @@ link "$DOTFILES/config/ghostty/shaders"           "$HOME/.config/ghostty/shaders
 link "$DOTFILES/config/yazi/yazi.toml"            "$HOME/.config/yazi/yazi.toml"
 link "$DOTFILES/config/yazi/init.lua"             "$HOME/.config/yazi/init.lua"
 link "$DOTFILES/config/yazi/plugins"              "$HOME/.config/yazi/plugins"
+# btop：配置 + 两套 snappy 主题；bin/btop 包装脚本按系统明暗挑主题，下面和其他脚本一起链到 ~/.local/bin
+link "$DOTFILES/config/btop/btop.conf"            "$HOME/.config/btop/btop.conf"
+link "$DOTFILES/config/btop/themes"               "$HOME/.config/btop/themes"
 mkdir -p "$HOME/.local/bin/tmux"
 link "$DOTFILES/bin/theme-preview"                "$HOME/.local/bin/theme-preview"
 link "$DOTFILES/bin/notify"                       "$HOME/.local/bin/notify"
+link "$DOTFILES/bin/btop"                         "$HOME/.local/bin/btop"
 for f in "$DOTFILES"/bin/tmux/*.sh; do
   link "$f" "$HOME/.local/bin/tmux/$(basename "$f")"
 done
-chmod +x "$DOTFILES"/bin/theme-preview "$DOTFILES"/bin/notify "$DOTFILES"/bin/tmux/*.sh 2>/dev/null || true
+chmod +x "$DOTFILES"/bin/theme-preview "$DOTFILES"/bin/notify "$DOTFILES"/bin/btop "$DOTFILES"/bin/tmux/*.sh 2>/dev/null || true
 
 # ── 7. Ghostty 毛玻璃（GNOME，仅在装了 Blur my Shell 时）──────
 # GNOME 不支持 Ghostty 自己的 background-blur，只能让 Blur my Shell 模糊它背后。

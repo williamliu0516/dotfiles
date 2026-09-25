@@ -1,0 +1,38 @@
+#!/usr/bin/env bash
+# btop 启动包装（软链到 ~/.local/bin/btop，排在真 btop 前面）：按系统明暗选主题，
+# 和 Ghostty 的 theme = dark:snappy,light:snappy_light 保持一致。
+# btop 没有命令行选主题的参数，主题名只能写在配置里，所以把 btop.conf 复制到临时文件、
+# 改掉 color_theme 那一行，再用 -c 启动；真正的配置文件（软链自 ~/.dotfiles）不动。
+# 主题文件仍从 ~/.config/btop/themes 读，-c 不影响这个目录。
+set -eu
+
+conf="${XDG_CONFIG_HOME:-$HOME/.config}/btop/btop.conf"
+
+# PATH 里第一个不是本脚本的 btop（macOS 是 brew 的，Linux 是 Home Manager 的）
+real=""
+IFS=:
+for d in $PATH; do
+  [ -x "$d/btop" ] || continue
+  [ "$d/btop" -ef "$0" ] && continue
+  real="$d/btop"; break
+done
+unset IFS
+[ -n "$real" ] || { echo "btop: 没装（brew install btop / home-manager switch）" >&2; exit 127; }
+
+# 默认暗色；只有系统明确是亮色才切 snappy_light（ssh 进来、没桌面的机器都当暗色）
+theme=snappy
+case "$(uname -s)" in
+  Darwin)
+    # 暗色时这个键是 "Dark"，亮色时键根本不存在（命令报错）
+    defaults read -g AppleInterfaceStyle 2>/dev/null | grep -q Dark || theme=snappy_light ;;
+  *)
+    case "$(gsettings get org.gnome.desktop.interface color-scheme 2>/dev/null || true)" in
+      "'default'"|"'prefer-light'") theme=snappy_light ;;
+    esac ;;
+esac
+
+tmp="$(mktemp "${TMPDIR:-/tmp}/btop.conf.XXXXXX")"
+trap 'rm -f "$tmp"' EXIT
+{ [ -r "$conf" ] && grep -v '^color_theme' "$conf"; echo "color_theme = \"$theme\""; } > "$tmp"
+
+"$real" -c "$tmp" "$@"

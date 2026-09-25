@@ -1,0 +1,61 @@
+# Theme: snappy (dark)
+# 和 Ghostty 的 themes/snappy 同一套色：正文 #c8d0e0，暗淡 #5d6784，强调蓝 #6fb0f4
+# main_bg 留空 = 用终端自己的背景（半透明毛玻璃透出来）；btop.conf 里 theme_background = false 是同一件事的双保险
+
+theme[main_bg]=""
+theme[main_fg]="#c8d0e0"
+theme[title]="#dce4f2"
+theme[hi_fg]="#6fb0f4"
+theme[selected_bg]="#283044"
+theme[selected_fg]="#edf1f9"
+theme[inactive_fg]="#5d6784"
+theme[graph_text]="#5d6784"
+theme[meter_bg]="#2c3144"
+theme[proc_misc]="#62bcc6"
+
+# 四个框的边线统一用 tmux 非活动窗格边框那个灰（colour8），分隔线再暗一档
+theme[cpu_box]="#5d6784"
+theme[mem_box]="#5d6784"
+theme[net_box]="#5d6784"
+theme[proc_box]="#5d6784"
+theme[div_line]="#3a4157"
+
+# 温度：绿 → 黄 → 红（越热越红）
+theme[temp_start]="#8ac48a"
+theme[temp_mid]="#d5ad63"
+theme[temp_end]="#dd7a84"
+
+# CPU：青 → 蓝 → 紫，冷色，和玻璃底色一个调子
+theme[cpu_start]="#62bcc6"
+theme[cpu_mid]="#6fb0f4"
+theme[cpu_end]="#a487eb"
+
+# 内存 / 磁盘：free 绿、cached 紫、available 青、used 蓝 → 紫 → 红
+theme[free_start]="#8ac48a"
+theme[free_mid]="#9dd29d"
+theme[free_end]="#62bcc6"
+theme[cached_start]="#a487eb"
+theme[cached_mid]="#b79ef5"
+theme[cached_end]="#88bfff"
+theme[available_start]="#62bcc6"
+theme[available_mid]="#7bcdd6"
+theme[available_end]="#88bfff"
+theme[used_start]="#6fb0f4"
+theme[used_mid]="#a487eb"
+theme[used_end]="#dd7a84"
+
+# 网络：下载绿系，上传紫系
+theme[download_start]="#8ac48a"
+theme[download_mid]="#9dd29d"
+theme[download_end]="#62bcc6"
+theme[upload_start]="#a487eb"
+theme[upload_mid]="#b79ef5"
+theme[upload_end]="#e88c95"
+
+# 进程框的状态横幅（暂停 / 跟随）
+theme[proc_pause_bg]="#5a3440"
+theme[proc_follow_bg]="#2e4a6e"
+theme[proc_banner_bg]="#3b3358"
+theme[proc_banner_fg]="#edf1f9"
+theme[followed_bg]="#2e4a6e"
+theme[followed_fg]="#edf1f9"
