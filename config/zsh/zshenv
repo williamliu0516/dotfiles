@@ -1,0 +1,12 @@
+# 每个 zsh 都读的环境（含非交互的：ssh 远程命令、mosh-server 启动、scp、cron）。
+# .zshrc 只在交互 shell 里读，所以 Blink / mosh 通过 `ssh host mosh-server new` 启动服务端时
+# PATH 里没有 Homebrew，会报 "mosh-server: command not found"；这里把 PATH 和 UTF-8 locale 补上。
+# 由 ~/.zshenv 在设完 ZDOTDIR 之后 source（zsh 不会自己读 $ZDOTDIR/.zshenv）
+typeset -U path
+for d in /opt/homebrew/bin /opt/homebrew/sbin /usr/local/bin /home/linuxbrew/.linuxbrew/bin "$HOME/.local/bin"; do
+  [ -d "$d" ] && path=("$d" $path)
+done
+# mosh-server 必须有 UTF-8 locale，客户端没带 LANG 过来时给个默认值
+if [ -z "${LANG:-}" ] && [ -z "${LC_ALL:-}" ]; then
+  export LANG=en_US.UTF-8
+fi
