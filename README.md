@@ -12,6 +12,8 @@ It opens a menu — pick what you want with the arrow keys and space, Enter to s
 curl -fsSL https://raw.githubusercontent.com/williamliu0516/dotfiles/main/install.sh | bash
 ```
 
+To update a machine, run the same command again. If something has edited a file inside `~/.dotfiles` (say `conda init` appending to the symlinked `.zshrc`), the edit is moved into `git stash` first so the update can go through; put machine-only shell settings in `~/.config/zsh/local.zsh` instead. A running tmux server is told to reload its config. If that server is still an older tmux binary (the apt one from before the Nix switch), the installer says so; `tmux kill-server` (alias `tk`) replaces it, and also closes whatever is running inside tmux.
+
 ## Modules
 
 | id | | Linux | macOS |

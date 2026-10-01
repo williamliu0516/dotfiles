@@ -63,7 +63,24 @@ esac
 
 # ── 拉仓库 ──────────────────────────────────────────────────
 if [ -d "$DOTFILES/.git" ]; then
-  git -C "$DOTFILES" pull --ff-only -q 2>/dev/null || warn "dotfiles 没能更新，用现有版本"
+  G() { git -C "$DOTFILES" "$@"; }
+  if ! G fetch -q 2>/dev/null; then
+    warn "连不上 GitHub，dotfiles 没能更新，用现有版本"
+  elif ! BEHIND=$(G rev-list --count 'HEAD..@{u}' 2>/dev/null); then
+    warn "~/.dotfiles 当前分支没有跟踪 GitHub 上的分支，没法自动更新，用现有版本"
+  elif [ "$BEHIND" -gt 0 ]; then
+    # 配置是软链进 ~/.config 的，别的工具顺手改一下（conda init 往 .zshrc 追加之类）就改进了仓库。
+    # 有本地改动时 pull 会中止，以前只打一行警告就拿旧仓库接着装，结果什么都没更新。先存进 stash 再快进
+    if [ -n "$(G status --porcelain --untracked-files=no)" ]; then
+      warn "~/.dotfiles 里有本地改动，挡住了更新："
+      G status --short --untracked-files=no | sed 's/^/      /'
+      # stash 要建一个提交；新机器上多半没配 git 身份，临时给一个，不然 stash 直接报错退出
+      G -c user.name=install.sh -c user.email=install.sh@localhost stash push -q -m "install.sh 更新前自动保存 $(date +%Y%m%d%H%M%S)"
+      warn "已存进 git stash（git -C ~/.dotfiles stash show -p 查看）；本机专属的 zsh 设置请挪到 ~/.config/zsh/local.zsh"
+    fi
+    G merge --ff-only -q '@{u}' || die "~/.dotfiles 和 GitHub 分叉了，没法快进；处理完再重跑：cd ~/.dotfiles && git status"
+    ok "dotfiles 已更新到 $(G log -1 --format='%h %s')"
+  fi
 else
   info "克隆 dotfiles → $DOTFILES"; git clone -q --depth 1 "$REPO_URL" "$DOTFILES"
 fi

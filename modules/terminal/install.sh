@@ -169,6 +169,19 @@ for f in "$DOTFILES"/bin/tmux/*.sh; do
 done
 chmod +x "$DOTFILES"/bin/theme-preview "$DOTFILES"/bin/notify "$DOTFILES"/bin/btop "$DOTFILES"/bin/tmux/*.sh 2>/dev/null || true
 
+# ── 6b. 正在运行的 tmux ─────────────────────────────────────
+# tmux server 只在启动时读一次配置，之后常驻（关掉终端窗口也不退出），所以光换文件 Alt+m 菜单和键位还是旧的。
+# 有 server 在跑就让它重载一次（等于 prefix r）。重载只加不删，旧配置里删掉的键位还留着；
+# server 若还是旧的 tmux 二进制（比如换成 Nix 之前 apt 装的那个），也只有重启才会换成新版
+if have tmux && tmux has-session 2>/dev/null; then
+  tmux source-file "$HOME/.config/tmux/tmux.conf" && ok "正在运行的 tmux 已重载新配置" \
+    || warn "正在运行的 tmux 重载配置出错（见上面的报错）"
+  SV="$(tmux display -p '#{version}' 2>/dev/null || true)"; CV="$(tmux -V 2>/dev/null | awk '{print $2}')"
+  if [ -n "$SV" ] && [ "$SV" != "$CV" ]; then
+    warn "正在运行的 tmux server 是 $SV，新装的是 $CV。方便时 tmux kill-server（别名 tk）再开 tmux（会关掉 tmux 里跑着的程序）"
+  fi
+fi
+
 # ── 7. Ghostty 毛玻璃（GNOME，仅在装了 Blur my Shell 时）──────
 # GNOME 不支持 Ghostty 自己的 background-blur，只能让 Blur my Shell 模糊它背后。
 # macOS 由 Ghostty 自己的 background-blur 处理（见 macos.ghostty），这里不用管。
