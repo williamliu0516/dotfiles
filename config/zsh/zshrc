@@ -189,7 +189,7 @@ bindkey '^[/' _cheat_widget
 # ===== 长命令结束通知：超过 30 秒的命令跑完时，如果你没在看这个终端就弹一条 =====
 # 交互式程序（编辑器、分页器、tmux、ssh…）本来就要人盯着，不算
 NOTIFY_AFTER=30
-NOTIFY_IGNORE='^(vim?|nvim|nano|less|more|man|tmux|ssh|mosh|top|htop|btop|yazi|lazygit|claude|fzf|python3?|node|irb|git (log|diff|show|commit|rebase)|y|z|cd|ls)( |$)'
+NOTIFY_IGNORE='^(vim?|nvim|nano|less|more|man|tmux|ssh|mosh|top|htop|btop|yazi|claude|fzf|python3?|node|irb|git (log|diff|show|commit|rebase)|y|z|cd|ls)( |$)'
 _notify_preexec() { _notify_cmd=$1; _notify_t0=$EPOCHSECONDS; }
 _notify_precmd() {
   local rc=$? t0=${_notify_t0:-} cmd=${_notify_cmd:-}

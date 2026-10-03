@@ -13,12 +13,12 @@ if [ "$OS" = macos ]; then
   # zsh 用系统自带的 /bin/zsh（已是默认 shell），不另装 brew 版
   # poppler 提供 pdftoppm，yazi 靠它渲染 PDF 预览
   # fd + ripgrep 给 fzf 用：列文件比 find 快得多，且自动跳过 .gitignore 里的东西
-  pkg_install tmux mosh fzf eza bat zoxide yazi lazygit poppler btop fd ripgrep
+  pkg_install tmux mosh fzf eza bat zoxide yazi poppler btop fd ripgrep
 else
   # Linux 上 apt 只装"必须是系统级"的东西：zsh（要写进 /etc/shells 当登录 shell）、mosh（ssh 远程命令
   # 要能直接找到 mosh-server）、libnotify-bin（notify-send 走桌面的 D-Bus）、git/curl/fontconfig。
   # 其余 CLI 工具全部交给 Nix + Home Manager（nix/home.nix）：版本锁在 flake.lock，和 Ubuntu 版本无关，
-  # 不用再为 22.04 的 fzf 太旧、eza 不在源里、yazi/lazygit 要抓 GitHub release 这些事写特判。
+  # 不用再为 22.04 的 fzf 太旧、eza 不在源里、yazi 要抓 GitHub release 这些事写特判。
   pkg_install zsh mosh git curl unzip fontconfig ca-certificates libnotify-bin xz-utils
 
   # ── 1b. Nix ─────────────────────────────────────────────
@@ -53,7 +53,7 @@ else
   if nix run "path:$DOTFILES/nix#home-manager" -- switch --flake "path:$DOTFILES/nix#linux" --impure -b bak; then
     [ -r "$HOME/.nix-profile/etc/profile.d/hm-session-vars.sh" ] && . "$HOME/.nix-profile/etc/profile.d/hm-session-vars.sh"
     export PATH="$HOME/.nix-profile/bin:$PATH"
-    ok "工具链：$(for t in tmux fzf eza bat zoxide yazi lazygit btop fd rg; do have $t && printf '%s ' "$t"; done)"
+    ok "工具链：$(for t in tmux fzf eza bat zoxide yazi btop fd rg; do have $t && printf '%s ' "$t"; done)"
     # 只清没人引用的 store 路径（编译 yazi 用的 Rust 工具链等，约 2-3 GB）；已装的生成代不受影响
     nix store gc >/dev/null 2>&1 || true
   else

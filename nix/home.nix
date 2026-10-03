@@ -12,7 +12,6 @@
     bat          # nix 里就叫 bat，不是 Ubuntu 的 batcat（zshrc 两种都认）
     zoxide
     yazi         # 来自 flake.nix 里的 yazi overlay（见那边的注释）
-    lazygit
     btop
     fd           # 同上，不是 fdfind
     ripgrep

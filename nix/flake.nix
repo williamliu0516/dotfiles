@@ -1,5 +1,5 @@
 {
-  # Linux 上的 CLI 工具链：tmux、fzf、eza、bat、zoxide、yazi、lazygit、btop、fd、ripgrep、poppler、字体。
+  # Linux 上的 CLI 工具链：tmux、fzf、eza、bat、zoxide、yazi、btop、fd、ripgrep、poppler、字体。
   # 全部来自 nixpkgs，版本锁在 flake.lock 里，所以每台 Ubuntu（不管 22.04 还是 26.04）装出来都一样，
   # 也不再依赖 apt 源里有没有某个包。系统层的东西（zsh 登录 shell、mosh、Ghostty）仍由 apt/snap 管。
   #
