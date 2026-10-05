@@ -154,6 +154,19 @@ link "$DOTFILES/config/ghostty/config.ghostty"    "$HOME/.config/ghostty/config.
 link "$DOTFILES/config/ghostty/$OS.ghostty"       "$HOME/.config/ghostty/platform.ghostty"
 link "$DOTFILES/config/ghostty/themes"            "$HOME/.config/ghostty/themes"
 link "$DOTFILES/config/ghostty/shaders"           "$HOME/.config/ghostty/shaders"
+# macOS：macos.ghostty 铺的预模糊壁纸图；Linux 用实时模糊，不链接
+if [ "$OS" = macos ]; then
+  link "$DOTFILES/config/ghostty/backgrounds"     "$HOME/.config/ghostty/backgrounds"
+  if [ ! -f "$DOTFILES/config/ghostty/backgrounds/wallpaper.png" ]; then
+    if have ffmpeg; then
+      info "生成 Ghostty 背景图（抓当前壁纸并模糊）"
+      "$DOTFILES/config/ghostty/backgrounds/make.sh" >/dev/null && ok "backgrounds/wallpaper.png" \
+        || warn "背景图生成失败（终端需要「屏幕录制」权限）。手动：config/ghostty/backgrounds/make.sh"
+    else
+      warn "没有 ffmpeg，跳过 Ghostty 背景图。brew install ffmpeg 后跑 config/ghostty/backgrounds/make.sh"
+    fi
+  fi
+fi
 link "$DOTFILES/config/yazi/yazi.toml"            "$HOME/.config/yazi/yazi.toml"
 link "$DOTFILES/config/yazi/init.lua"             "$HOME/.config/yazi/init.lua"
 link "$DOTFILES/config/yazi/plugins"              "$HOME/.config/yazi/plugins"
@@ -184,7 +197,7 @@ fi
 
 # ── 7. Ghostty 毛玻璃（GNOME，仅在装了 Blur my Shell 时）──────
 # GNOME 不支持 Ghostty 自己的 background-blur，只能让 Blur my Shell 模糊它背后。
-# macOS 由 Ghostty 自己的 background-blur 处理（见 macos.ghostty），这里不用管。
+# macOS 不用实时模糊，铺的是预模糊的壁纸图（见 macos.ghostty），这里不用管。
 BMS_SCHEMAS=""
 for d in "$HOME/.local/share/gnome-shell/extensions/blur-my-shell@aunetx" \
          /usr/share/gnome-shell/extensions/blur-my-shell@aunetx; do
