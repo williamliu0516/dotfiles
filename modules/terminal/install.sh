@@ -13,13 +13,15 @@ if [ "$OS" = macos ]; then
   # zsh 用系统自带的 /bin/zsh（已是默认 shell），不另装 brew 版
   # poppler 提供 pdftoppm，yazi 靠它渲染 PDF 预览
   # fd + ripgrep 给 fzf 用：列文件比 find 快得多，且自动跳过 .gitignore 里的东西
-  pkg_install tmux mosh fzf eza bat zoxide yazi poppler btop fd ripgrep
+  # yazi 不在这里，两个系统都下预编译版，见下面的 1d
+  pkg_install tmux mosh fzf eza bat zoxide poppler btop fd ripgrep
 else
   # Linux 上 apt 只装"必须是系统级"的东西：zsh（要写进 /etc/shells 当登录 shell）、mosh（ssh 远程命令
   # 要能直接找到 mosh-server）、libnotify-bin（notify-send 走桌面的 D-Bus）、git/curl/fontconfig。
   # 其余 CLI 工具全部交给 Nix + Home Manager（nix/home.nix）：版本锁在 flake.lock，和 Ubuntu 版本无关，
-  # 不用再为 22.04 的 fzf 太旧、eza 不在源里、yazi 要抓 GitHub release 这些事写特判。
-  pkg_install zsh mosh git curl unzip fontconfig ca-certificates libnotify-bin xz-utils
+  # 不用再为 22.04 的 fzf 太旧、eza 不在源里这些事写特判。yazi 例外，下的是 GitHub 上的 nightly，见 1d。
+  # python3 给 gh_install 解析 GitHub API 的 JSON（精简镜像里没有）
+  pkg_install zsh mosh git curl unzip python3 fontconfig ca-certificates libnotify-bin xz-utils
 
   # ── 1b. Nix ─────────────────────────────────────────────
   NIX_SH=/nix/var/nix/profiles/default/etc/profile.d/nix-daemon.sh
@@ -48,13 +50,13 @@ else
   fi
 
   # ── 1c. Home Manager：装 CLI 工具和字体 ────────────────────
-  info "Home Manager：安装 CLI 工具链（首次会下载几百 MB，yazi 要从源码编译几分钟）"
+  info "Home Manager：安装 CLI 工具链（首次会下载几百 MB）"
   # -b bak：Home Manager 要接管的文件如果已存在（比如旧的 fontconfig），改名成 *.bak 而不是报错
   if nix run "path:$DOTFILES/nix#home-manager" -- switch --flake "path:$DOTFILES/nix#linux" --impure -b bak; then
     [ -r "$HOME/.nix-profile/etc/profile.d/hm-session-vars.sh" ] && . "$HOME/.nix-profile/etc/profile.d/hm-session-vars.sh"
     export PATH="$HOME/.nix-profile/bin:$PATH"
-    ok "工具链：$(for t in tmux fzf eza bat zoxide yazi btop fd rg; do have $t && printf '%s ' "$t"; done)"
-    # 只清没人引用的 store 路径（编译 yazi 用的 Rust 工具链等，约 2-3 GB）；已装的生成代不受影响
+    ok "工具链：$(for t in tmux fzf eza bat zoxide btop fd rg; do have $t && printf '%s ' "$t"; done)"
+    # 只清没人引用的 store 路径（以前用 Nix 编译 yazi 留下的 Rust 工具链等，约 2-3 GB）；已装的生成代不受影响
     nix store gc >/dev/null 2>&1 || true
   else
     warn "Home Manager 失败，CLI 工具没装上；其余配置照常安装。单独重试：home-manager switch --flake path:$DOTFILES/nix#linux --impure"
@@ -62,12 +64,26 @@ else
   fi
 fi
 
+# ── 1d. yazi ────────────────────────────────────────────────
+# 两个系统都直接下 GitHub 上的预编译版，不走 brew / Nix。yazi.toml 的 custom 排序（plugins/hidden-last.yazi）
+# 要 26.9.1 之后的版本，正式版还没出，所以用 nightly：yazi 每天从主干自动构建，带 macOS / Linux 二进制。
+# 以前 Linux 上是 Nix 编译主干（拉 2-3 GB Rust 工具链、编译好几分钟），Intel Mac 上 brew 没有 bottle，
+# 得先编译 LLVM 和 Rust（一个多小时）。下一个正式版出来后，把默认值改成 latest。重跑本脚本即更新到最新构建
+YAZI_TAG="${YAZI_TAG:-nightly}"
+info "安装 yazi（GitHub $YAZI_TAG 预编译版）"
+if run_step "下载 yazi $YAZI_TAG" gh_install sxyazi/yazi "$YAZI_TAG" "yazi-@T@.zip" yazi ya; then
+  ok "yazi ${YAZI_TAG}：$("$HOME/.local/bin/yazi" --version 2>/dev/null | sed -n 's/^ *Version: *//p')"
+else
+  step_failed $? yazi "bash $DOTFILES/install.sh --only terminal"
+fi
+
 # ── 2. Ghostty ──────────────────────────────────────────────
 if have ghostty || [ -d /Applications/Ghostty.app ]; then
   ok "Ghostty 已安装"
 elif [ "$OS" = macos ]; then
   info "安装 Ghostty（brew cask）"
-  brew install -q --cask ghostty >/dev/null && ok "Ghostty" || warn "Ghostty 安装失败，其余配置照常安装"
+  if run_step "brew install --cask ghostty" brew install -q --cask ghostty; then ok "Ghostty"
+  else step_failed $? Ghostty "brew install --cask ghostty"; fi
 # Ubuntu 26.04 起 Ghostty 进了官方源。看 Candidate 而不是 apt-cache show：卸掉的第三方 .deb 会留下元数据，show 照样有输出
 elif apt-cache policy ghostty 2>/dev/null | grep -q 'Candidate: [0-9]' \
      && { info "安装 Ghostty（apt）"; $SUDO apt-get install -y -qq ghostty >/dev/null 2>&1; }; then
@@ -88,7 +104,8 @@ if [ "$OS" = macos ]; then
     ok "Maple Mono NF CN 已安装"
   else
     info "安装 Maple Mono NF CN（brew cask）"
-    brew install -q --cask font-maple-mono-nf-cn >/dev/null && ok "字体已安装" || warn "字体安装失败，跳过"
+    if run_step "brew install --cask font-maple-mono-nf-cn（约 150MB）" brew install -q --cask font-maple-mono-nf-cn; then ok "字体已安装"
+    else step_failed $? 字体 "brew install --cask font-maple-mono-nf-cn"; fi
   fi
 elif fc-list 2>/dev/null | grep -i "Maple Mono NF CN" >/dev/null 2>&1; then
   ok "Maple Mono NF CN 已安装"
@@ -114,9 +131,11 @@ info "安装 zsh 插件"
 ZP="$HOME/.config/zsh/plugins"; mkdir -p "$ZP"
 clone_plugin() {
   local url=$1 name=$2
-  if [ -d "$ZP/$name/.git" ]; then git -C "$ZP/$name" pull -q --ff-only 2>/dev/null || true
-  else git clone -q --depth 1 "$url" "$ZP/$name"; fi
-  ok "$name"
+  if [ -d "$ZP/$name/.git" ]; then
+    run_step "更新 $name" git -C "$ZP/$name" pull -q --ff-only || true
+    ok "$name"
+  elif run_step "git clone $name" git clone -q --depth 1 "$url" "$ZP/$name"; then ok "$name"
+  else step_failed $? "$name"; fi
 }
 clone_plugin https://github.com/zsh-users/zsh-autosuggestions            zsh-autosuggestions
 clone_plugin https://github.com/zdharma-continuum/fast-syntax-highlighting fast-syntax-highlighting
@@ -129,8 +148,8 @@ info "安装 tmux 插件"
 TP="$HOME/.config/tmux/plugins"; mkdir -p "$TP"
 # 直接克隆，不靠 tpm 的 install_plugins——它要从运行中的 tmux server 读插件路径，新机器上还没有 server
 for p in tpm tmux-resurrect tmux-continuum; do
-  [ -d "$TP/$p/.git" ] || git clone -q --depth 1 "https://github.com/tmux-plugins/$p" "$TP/$p"
-  ok "$p"
+  if [ -d "$TP/$p/.git" ] || run_step "git clone $p" git clone -q --depth 1 "https://github.com/tmux-plugins/$p" "$TP/$p"; then ok "$p"
+  else step_failed $? "$p"; fi
 done
 
 # ── 6. 软链配置 ─────────────────────────────────────────────
@@ -191,7 +210,7 @@ if have tmux && tmux has-session 2>/dev/null; then
     || warn "正在运行的 tmux 重载配置出错（见上面的报错）"
   SV="$(tmux display -p '#{version}' 2>/dev/null || true)"; CV="$(tmux -V 2>/dev/null | awk '{print $2}')"
   if [ -n "$SV" ] && [ "$SV" != "$CV" ]; then
-    warn "正在运行的 tmux server 是 $SV，新装的是 $CV。方便时 tmux kill-server（别名 tk）再开 tmux（会关掉 tmux 里跑着的程序）"
+    warn "正在运行的 tmux server 是 ${SV}，新装的是 ${CV}。方便时 tmux kill-server（别名 tk）再开 tmux（会关掉 tmux 里跑着的程序）"
   fi
 fi
 

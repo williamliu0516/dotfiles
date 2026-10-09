@@ -11,7 +11,7 @@
     eza
     bat          # nix 里就叫 bat，不是 Ubuntu 的 batcat（zshrc 两种都认）
     zoxide
-    yazi         # 来自 flake.nix 里的 yazi overlay（见那边的注释）
+    # yazi 不在这里：配置要 26.9.1 之后的版本，由 modules/terminal/install.sh 下 GitHub 上的 nightly 到 ~/.local/bin
     btop
     fd           # 同上，不是 fdfind
     ripgrep

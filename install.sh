@@ -85,6 +85,7 @@ else
   info "克隆 dotfiles → $DOTFILES"; git clone -q --depth 1 "$REPO_URL" "$DOTFILES"
 fi
 . "$DOTFILES/lib/common.sh"
+: >"$DOTFILES_LOG"   # 日志只留这一次运行的
 
 # ── 发现模块 ────────────────────────────────────────────────
 # 每个模块在 install.sh 开头用注释声明 name / desc / os / needs
@@ -207,5 +208,6 @@ done
 echo
 bold "装完了。"
 for id in $DONE;   do ok   "$(meta "$id" name)"; done
-for id in $FAILED; do warn "$(meta "$id" name)（失败，可以单独重跑：bash $DOTFILES/install.sh --only $id）"; done
+for id in $FAILED; do warn "$(meta "$id" name)（失败，可以单独重跑：bash $DOTFILES/install.sh --only ${id}）"; done
+[ -z "$FAILED" ] || info "完整输出在 $(tilde "$DOTFILES_LOG")"
 [ -z "$FAILED" ]

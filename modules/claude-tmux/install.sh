@@ -7,7 +7,7 @@ set -euo pipefail
 . "${DOTFILES_DIR:-$HOME/.dotfiles}/lib/common.sh"
 
 HOOK="$HOME/.local/bin/tmux/claude-state.sh"
-[ -x "$HOOK" ] || die "找不到 $HOOK，先装 Ghostty + tmux + zsh 模块"
+[ -x "$HOOK" ] || die "找不到 ${HOOK}，先装 Ghostty + tmux + zsh 模块"
 have python3 || die "需要 python3"
 
 info "注册 Claude Code hook（合并进 ~/.claude/settings.json）"

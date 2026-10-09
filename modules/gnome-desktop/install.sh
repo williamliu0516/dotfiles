@@ -67,7 +67,7 @@ gsettings_append org.gnome.shell disabled-extensions ubuntu-dock@ubuntu.com
 #   topbar-squeeze：顶栏滑出时挤窄最大化窗口，收回时窗口铺满
 LOCAL_EXTS="topbar-squeeze@xiawei"
 for e in $LOCAL_EXTS; do
-  ln -sfn "$DOTFILES/config/gnome/extensions/$e" "$EXT_DIR/$e" && ok "$e（仓库自带）"
+  ln -sfn "$DOTFILES/config/gnome/extensions/$e" "$EXT_DIR/$e" && ok "${e}（仓库自带）"
 done
 EXTS="$EXTS
 $LOCAL_EXTS"

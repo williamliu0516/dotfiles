@@ -5,8 +5,8 @@
 show_hidden = true
 # 顺序：普通目录 → 普通文件 → 隐藏目录 → 隐藏文件，每组内按修改时间倒序（最新在上）。
 # yazi 自带的排序做不到"隐藏文件放最后"（作者拒了对应 PR），所以用 custom 排序 + plugins/hidden-last.yazi 算顺序。
-# custom 需要 26.9.1 之后的版本（brew 的 26.9.1 会报 unknown variant `custom`）；macOS 上目前装的是
-# ~/.local/bin/yazi（nightly），等 brew 出下一个版本后删掉它即可。
+# custom 需要 26.9.1 之后的版本（26.9.1 会报 unknown variant `custom`），所以安装脚本在两个系统上
+# 都装 yazi 的 nightly 预编译版（~/.local/bin/yazi，见 modules/terminal/install.sh 的 YAZI_TAG）。
 # reverse / dir_first 必须关：插件已经把"目录在前、时间倒序"编进 rank 里，这两个开着会把顺序翻回去。
 sort_by = "custom"
 sort_reverse = false

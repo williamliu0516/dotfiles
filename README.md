@@ -51,7 +51,7 @@ Right-arrow accepts the greyed-out suggestion; Tab completes as usual. Up-arrow 
 
 A command that runs longer than 30 seconds sends a desktop notification when it finishes (with the exit code if it failed), but only if you're not looking at that terminal. Editors, pagers, ssh and other interactive programs are excluded. `bin/notify` is the helper; `notify --if-away title body` from any script gets the same behaviour.
 
-yazi shows hidden files, gives the preview pane the most room, and shows sizes in the list (`config/yazi/yazi.toml`). The list is ordered regular directories → regular files → hidden directories → hidden files, each group newest first; yazi cannot do "hidden last" on its own, so `config/yazi/plugins/hidden-last.yazi` computes the order through yazi's custom sort (needs a build newer than 26.9.1 — on macOS a nightly lives in `~/.local/bin/yazi` until brew ships the next release).
+yazi shows hidden files, gives the preview pane the most room, and shows sizes in the list (`config/yazi/yazi.toml`). The list is ordered regular directories → regular files → hidden directories → hidden files, each group newest first; yazi cannot do "hidden last" on its own, so `config/yazi/plugins/hidden-last.yazi` computes the order through yazi's custom sort (needs a build newer than 26.9.1, so the installer puts yazi's prebuilt nightly in `~/.local/bin/yazi` on both systems; re-running it fetches the latest nightly).
 
 btop draws no background of its own (`theme_background = false`), so the frosted glass shows through it like everywhere else, and its colours come from the same snappy palette as Ghostty (`config/btop/themes/`). btop can't follow the system's light/dark mode by itself and has no flag to pick a theme, so `bin/btop` (linked to `~/.local/bin/btop`, ahead of the real one) reads the system appearance at launch and starts btop with a copy of the config pointing at `snappy` or `snappy_light`. Settings changed inside btop aren't saved on exit; edit `config/btop/btop.conf` instead.
 
@@ -122,7 +122,7 @@ lib/common.sh        shared helpers (output, link, apt/brew)
 modules/<id>/install.sh
                      one per module; the header declares name, desc, os, needs
 nix/
-  flake.nix  pins nixpkgs + Home Manager (+ yazi main until nixpkgs passes 26.9.1); flake.lock is the version lock
+  flake.nix  pins nixpkgs + Home Manager; flake.lock is the version lock
   home.nix   the Linux CLI tool list and the font; configs stay symlinked, not managed by Home Manager
 config/
   zsh/       zshrc, p10k.zsh, zshenv (PATH + locale for non-interactive shells: ssh commands, mosh-server)
@@ -159,14 +159,19 @@ Open the shell from Ghostty on the Mac and the Alt keys travel through Ghostty i
 ## Requirements
 
 - **Linux:** Debian/Ubuntu with `apt` and `sudo`. apt installs only what has to be system-level (zsh as the login shell, mosh, `notify-send`, git, curl). Everything else in the Tools row comes from [Nix](https://nixos.org) + [Home Manager](https://github.com/nix-community/home-manager), pinned in `nix/flake.lock`, so every machine gets the same versions whatever its Ubuntu release. The installer sets up Nix with the [Determinate installer](https://github.com/DeterminateSystems/nix-installer) if it isn't there (`/nix/nix-installer uninstall` removes it). Ghostty is a GUI app and stays out of Nix (Nix-built GUI programs can't find the system's OpenGL drivers on non-NixOS): it comes from apt on Ubuntu 26.04+, otherwise the [official snap](https://ghostty.org/docs/install/binary) (`snap install ghostty --classic`).
-- **macOS:** [Homebrew](https://brew.sh) and the Xcode command line tools (`xcode-select --install`). Ghostty and the font come from brew casks; zsh stays the system `/bin/zsh`.
+- **macOS:** [Homebrew](https://brew.sh) and the Xcode command line tools (`xcode-select --install`). Ghostty and the font come from brew casks; zsh stays the system `/bin/zsh`. Before installing, the script checks which packages Homebrew has a prebuilt bottle for on this Mac (many have none on Intel). Without one, fd, ripgrep, bat, zoxide and fzf come from their official GitHub release builds into `~/.local/bin`; small source builds go ahead; a long one (anything pulling in LLVM or Rust, or more than five packages) is asked about up front, and skipped without a terminal.
+- **Both:** yazi is the prebuilt nightly from its GitHub releases, not brew or Nix, because the config needs a build newer than 26.9.1.
 
 ## Options
 
 ```bash
 DOTFILES_DIR=~/src/dotfiles  bash install.sh   # clone somewhere else
 MAPLE_FONT_VERSION=v7.8      bash install.sh   # pin the font version (macOS / fallback download only; Linux gets it from nixpkgs)
+YAZI_TAG=latest              bash install.sh   # yazi's latest release instead of the nightly (or a tag like v26.9.1)
+DOTFILES_SOURCE_BUILD=1      bash install.sh   # macOS: compile long source builds without asking
 ```
+
+Each slow step (a brew install, a download, a git clone) shows on one line while it runs. Ctrl-C skips just that step; pressing it twice within two seconds stops the installer. The full output of the last run is in `~/.cache/dotfiles-install.log`.
 
 ## Updating the Linux tools
 
@@ -174,7 +179,7 @@ The versions are whatever `nix/flake.lock` says. To move every machine forward, 
 
 ```bash
 cd ~/.dotfiles/nix
-nix flake update                                       # newest nixpkgs / Home Manager / yazi
+nix flake update                                       # newest nixpkgs / Home Manager
 home-manager switch --flake path:.#linux --impure      # apply here
 home-manager generations                               # list previous states; each has a rollback script
 ```
