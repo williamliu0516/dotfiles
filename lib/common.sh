@@ -251,3 +251,34 @@ gsettings_append() {  # gsettings_append schema key value [schemadir]
   if [ -n "$dir" ]; then gsettings --schemadir "$dir" set "$schema" "$key" "$new"
   else                   gsettings set "$schema" "$key" "$new"; fi
 }
+
+# 往 ~/.claude/settings.json 注册 Claude Code hook（async）：claude_hook 命令 超时秒数 事件...
+# 事件写成 PreToolUse:* 就带 matcher。按命令去重：事件里已经有这条命令就跳过，
+# 别人注册的 hook（键盘屏等）原样保留——不能用 setdefault，事件已被占用时会整个漏掉。
+# 有改动时先备份成 settings.json.bak；输出 changed 或 unchanged
+claude_hook() {
+  local cmd=$1 timeout=$2; shift 2
+  mkdir -p "$HOME/.claude"
+  python3 - "$HOME/.claude/settings.json" "$cmd" "$timeout" "$@" <<'PY'
+import json, os, shutil, sys
+path, cmd, timeout, events = sys.argv[1], sys.argv[2], int(sys.argv[3]), sys.argv[4:]
+d = json.load(open(path)) if os.path.exists(path) else {}
+hooks, changed = d.setdefault("hooks", {}), False
+for spec in events:
+    event, _, matcher = spec.partition(":")
+    groups = hooks.setdefault(event, [])
+    if any(h.get("command") == cmd for g in groups for h in g.get("hooks", [])):
+        continue
+    entry = {"type": "command", "command": cmd, "async": True, "timeout": timeout}
+    groups.append({**({"matcher": matcher} if matcher else {}), "hooks": [entry]})
+    changed = True
+if not changed:
+    print("unchanged"); sys.exit(0)
+if os.path.exists(path):
+    shutil.copy2(path, path + ".bak")
+with open(path + ".tmp", "w") as f:
+    json.dump(d, f, indent=2, ensure_ascii=False); f.write("\n")
+os.replace(path + ".tmp", path)
+print("changed")
+PY
+}
