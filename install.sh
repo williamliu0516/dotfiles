@@ -16,7 +16,7 @@ DOTFILES="${DOTFILES_DIR:-$HOME/.dotfiles}"
 export DOTFILES_DIR="$DOTFILES"
 
 # 模块的显示和执行顺序；不在这里的新模块排在最后
-ORDER="terminal claude-tmux claude-statusline keyboard-display gnome-desktop"
+ORDER="terminal claude-tmux claude-push claude-statusline keyboard-display gnome-desktop"
 
 # 仓库还没拉下来之前，lib/common.sh 不可用，先用最小的一套输出函数
 bold() { printf '\033[1m%s\033[0m\n' "$*"; }

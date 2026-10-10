@@ -20,6 +20,7 @@ To update a machine, run the same command again. If something has edited a file 
 |---|---|:-:|:-:|
 | `terminal` | Ghostty + tmux + zsh, fonts, plugins | ✓ | ✓ |
 | `claude-tmux` | tmux window numbers coloured by Claude Code state (needs `terminal`) | ✓ | ✓ |
+| `claude-push` | Phone / iPad push via [ntfy](https://ntfy.sh) whenever Claude stops or waits for approval | ✓ | ✓ |
 | `claude-statusline` | Claude Code status line — folder, branch, model, 5h and weekly usage. From [claude-status-bar](https://github.com/williamliu0516/claude-status-bar) | ✓ | ✓ |
 | `keyboard-display` | Claude Code sessions on a keyboard's 142×428 panel. From [context-keyboard-display](https://github.com/williamliu0516/context-keyboard-display); the hotkeys are macOS-only | ✓ | ✓ |
 | `gnome-desktop` | Orchis theme, Tela icons, lighter top bar and dock, auto-hiding top bar, Super+Enter drop-down Ghostty | GNOME | |
@@ -91,6 +92,8 @@ Split a window and each pane gets a title bar — index, running command, path �
 
 Window numbers are colour-coded by Claude Code state — cyan running, yellow needs approval, green done, red error. When any window is waiting on you, a yellow bell with the count appears at the left of the status bar, and a desktop notification fires when Claude is waiting, finished or failed, if you're not looking at that window (it's not the current tmux window, or Ghostty isn't the front app).
 
+`claude-push` pushes to your phone every time Claude stops, and when it waits for approval: the session title, the folder and the first line of Claude's last reply. Settings live in `~/.config/claude-push/config.json`, outside the repo: on ntfy.sh the topic name is the password. The reply excerpt passes through the ntfy server; set `excerpt` to `false` to send only the title. Copy that file to another machine to share the topic.
+
 Sessions auto-save every 15 minutes and restore on start (tmux-resurrect + continuum).
 
 ### mosh (iPad / flaky links)
@@ -130,6 +133,7 @@ config/
   ghostty/   config.ghostty (shared), linux.ghostty / macos.ghostty (linked as platform.ghostty), themes/, shaders/
   gnome/     extensions.dconf — extension settings, merged with dconf load
 bin/
+  claude-push          Claude Code hook → ntfy push; `claude-push --test` sends one
   theme-preview        preview any Ghostty theme in the terminal, ranked by contrast
   tmux/cheatsheet.sh   the Ctrl+b ? popup
   tmux/claude-state.sh Claude Code hook → tmux window colour

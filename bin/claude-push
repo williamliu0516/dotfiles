@@ -1,0 +1,140 @@
+#!/usr/bin/env python3
+"""Claude Code hook → 手机 / iPad 推送（ntfy）。
+
+  Stop          Claude 一停就推「完成」，带会话标题和它最后一段话的开头
+  Notification  等你批准 / Claude 在问你时推「等你」（高优先级）
+
+配置在 ~/.config/claude-push/config.json，不进仓库——ntfy.sh 上谁知道主题名谁就能读能发：
+  {"server": "https://ntfy.sh", "topic": "...", "excerpt": true}
+excerpt 为 true 时，推送里带 Claude 最后一段话的开头（会经过 ntfy 服务器）。
+
+  claude-push --test     发一条测试推送
+"""
+
+import json
+import os
+import re
+import sys
+import time
+import urllib.request
+
+CONF = os.path.expanduser(os.environ.get("CLAUDE_PUSH_CONFIG", "~/.config/claude-push/config.json"))
+LOG = os.path.expanduser("~/.cache/claude-push/log")
+WAITING = {"permission_prompt", "elicitation_dialog", "elicitation_url_dialog", "agent_needs_input"}
+
+
+def load_conf():
+    conf = {"server": "https://ntfy.sh", "topic": "", "excerpt": True}
+    try:
+        with open(CONF) as f:
+            conf.update(json.load(f))
+    except (OSError, ValueError):
+        pass
+    return conf
+
+
+def log(msg):
+    try:
+        os.makedirs(os.path.dirname(LOG), exist_ok=True)
+        if os.path.exists(LOG) and os.path.getsize(LOG) > 256_000:
+            os.replace(LOG, LOG + ".1")
+        with open(LOG, "a") as f:
+            f.write(time.strftime("%Y-%m-%d %H:%M:%S ") + msg + "\n")
+    except OSError:
+        pass
+
+
+def session_info(path):
+    """(AI 起的会话标题, Claude 最后一段话)，从 transcript 末尾 2 MB 里找。"""
+    try:
+        with open(path, "rb") as f:
+            f.seek(0, 2)
+            f.seek(max(0, f.tell() - 2_000_000))
+            lines = f.read().split(b"\n")
+    except (OSError, TypeError):
+        return "", ""
+    title, text = "", ""
+    for line in reversed(lines):
+        if b'"assistant"' not in line and b'"ai-title"' not in line:
+            continue
+        try:
+            r = json.loads(line)
+        except ValueError:
+            continue
+        if r.get("type") == "ai-title" and not title:
+            title = r.get("aiTitle") or ""
+        elif r.get("type") == "assistant" and not text and not r.get("isSidechain"):
+            content = (r.get("message") or {}).get("content")
+            if isinstance(content, list):
+                text = "\n".join(b.get("text", "") for b in content if b.get("type") == "text").strip()
+        if title and text:
+            break
+    return title, text
+
+
+def excerpt(text, n=140):
+    """第一段正文去掉 markdown，压成一行。"""
+    text = re.sub(r"```.*?```", "\n\n", text, flags=re.S)
+    para = next((p for p in re.split(r"\n\s*\n", text) if p.strip()), "")
+    s = re.sub(r"`([^`]*)`", r"\1", para)
+    s = re.sub(r"\[([^\]]+)\]\([^)]*\)", r"\1", s)
+    s = re.sub(r"\*\*|__|^\s*#+\s*|^\s*(?:[-*]|\d+\.)\s+", "", s, flags=re.M)
+    s = " ".join(s.split())
+    return s if len(s) <= n else s[: n - 1] + "…"
+
+
+def push(conf, title, message, priority=3):
+    body = json.dumps({"topic": conf["topic"], "title": title, "message": message, "priority": priority}).encode()
+    req = urllib.request.Request(conf["server"].rstrip("/") + "/", data=body,
+                                 headers={"Content-Type": "application/json"})
+    with urllib.request.urlopen(req, timeout=8) as r:
+        r.read()
+
+
+def main():
+    conf = load_conf()
+    if sys.argv[1:] == ["--test"]:
+        if not conf["topic"]:
+            sys.exit(f"{CONF} 里没有 topic")
+        push(conf, "Claude Code 推送测试", "能看到这条，说明手机这边订阅好了")
+        print(f"已推到 {conf['server']}/{conf['topic']}")
+        return
+
+    try:
+        p = json.load(sys.stdin)
+    except ValueError:
+        return
+    if not conf["topic"]:
+        return
+    event = p.get("hook_event_name")
+    project = os.path.basename((p.get("cwd") or "").rstrip("/")) or "~"
+
+    if event == "Stop":
+        title, text = session_info(p.get("transcript_path"))
+        last = p.get("last_assistant_message")
+        if isinstance(last, str) and last.strip():
+            text = last
+        msg = project + ("\n" + excerpt(text) if conf["excerpt"] and text else "")
+        head, prio = f"完成 · {title or project}", 3
+    elif event == "Notification" and p.get("notification_type") in WAITING:
+        title, _ = session_info(p.get("transcript_path"))
+        raw = p.get("message") or ""
+        m = re.search(r"permission to use (.+)$", raw)
+        msg = f"{project} · {'要用 ' + m.group(1) if m else raw or '在等你回复'}"
+        head, prio = f"等你 · {title or project}", 4
+    else:
+        return
+
+    try:
+        push(conf, head, msg, prio)
+    except Exception as e:  # 推不出去也不能影响会话
+        log(f"push failed {event} {(p.get('session_id') or '')[:8]}: {e!r}")
+
+
+if __name__ == "__main__":
+    try:
+        main()
+    except SystemExit:
+        raise
+    except Exception as e:
+        log(f"error: {e!r}")
