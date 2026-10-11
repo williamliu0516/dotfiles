@@ -9,13 +9,15 @@
 # 后两种在窗格数不是 4 的时候退回 dwm 排（模式仍记着，回到 4 个就恢复）。
 # 重排挂在 tmux.conf 的 hook 上，所以鼠标、菜单、前缀键分屏都会自动重排；再加上 dwm 的"设为主窗格"
 # 和按窗口开关自动排版。
-# 用法: dwm.sh new|zoom|toggle|keep|mode <pane_id> [row|dwm|grid|dwm2]
+# 用法: dwm.sh new|zoom|toggle|keep|mode|join|break <pane_id> [row|dwm|grid|dwm2]
 #   new     新窗格：row 接到最右边，其余排到右侧栏最下面；焦点跟过去
 #   zoom    当前窗格和主窗格（最左边那个）互换（dwm 的 Mod+Enter）；本身就是主窗格时和第二个互换
 #   toggle  当前窗口开 / 关自动排版（关掉后分屏、布局都回到手动）
 #   keep    手动调过主窗格宽度后记下来，之后重排保持这个宽度（dwm 的 mfact）；row / grid 永远均分，不记
 #   mode    切换排版模式；不带参数就按 row → dwm →（grid → dwm2，仅 4 窗格）→ row 轮换。选了模式就顺手把自动排版打开
 #   resized 窗口尺寸变了：grid / dwm2 按新尺寸重算（其余模式 tmux 自己等比缩放就够了）
+#   join    弹窗挑别的窗口（整个标签，含全部窗格）并进当前窗口当分屏（pick 挑、preview 预览、take 执行）
+#   break   当前窗格拆出去成为独立窗口（join 的反操作）
 # 自动重排本身在 tmux.conf 的 hook 里，不走这个脚本，省得每次开关窗格都起一个 shell；
 # dwm2 的布局串在这里算好存进窗口选项 @dwm2-layout，hook 直接拿来 select-layout
 cmd=$1
@@ -158,6 +160,64 @@ case "$cmd" in
   resized)
     case "$(mode)" in grid|dwm2) [ "$(panes)" = 4 ] && retile ;; esac
     ;;
-  *) echo "用法: $0 new|zoom|toggle|keep|mode|resized <pane_id> [row|dwm|grid|dwm2]" >&2; exit 2 ;;
+  join)
+    # 弹窗里用 fzf 挑本会话的其他窗口，选中的并进当前窗口当一个分屏（挑选在 pick）。
+    # 不用 choose-tree：tmux 3.7 的 -f 过滤藏不掉当前窗口，光标还默认停在它上面，直接回车什么都不发生
+    if [ "$(tmux display -p -t "$pane" '#{session_windows}')" -lt 2 ]; then
+      tmux display "只有这一个窗口，没有别的可以并进来"
+      exit 0
+    fi
+    tmux display-popup -t "$pane" -w 80% -h 70% -E "~/.local/bin/tmux/dwm.sh pick $pane"
+    ;;
+  pick)
+    # join 的弹窗：上一个用过的窗口排第一（直接回车就是它），其余按编号；右边预览窗口内容。
+    # Tab 多选，选完一个接一个并进来。用 window_id 不用编号：并走一个后 renumber-windows 会让编号错位
+    tab=$(printf '\t')
+    tmux list-windows -t "$pane" -F "#{window_last_flag}$tab#{window_id}$tab#{window_index}: #{window_name}#{?#{>:#{window_panes},1}, （#{window_panes} 个窗格）,}" \
+      | awk -F "$tab" -v cur="$win" '$2 != cur' | sort -s -t "$tab" -k1,1r | cut -f2- \
+      | fzf --reverse --multi --delimiter="$tab" --with-nth=2 --prompt='并进当前窗口 › ' \
+            --header='回车并进来 · Tab 多选 · Esc 取消' \
+            --preview="$0 preview $pane {1}" --preview-window='right,60%,border-left,follow' \
+      | cut -f1 | while read -r id; do "$0" take "$pane" "$id"; done
+    ;;
+  preview)
+    # pick 的预览：那个窗口活动窗格的当前屏幕，去掉末尾空行（follow 滚到底时看到的是最后的输出，不是一片空白）
+    tmux capture-pane -ep -t "$3" | awk 'NF { for (; n > 0; n--) print ""; print; next } { n++ }'
+    ;;
+  take)
+    # pick 选完回到这里：把窗口 $3 的全部窗格按顺序并进 $pane 所在的窗口，那个标签随之消失。
+    # 和新窗格一样接在栈底 / 行尾；join-pane 不触发 after-split-window，所以并完自己重排。
+    # 焦点停在那个窗口原来的活动窗格上
+    srcwin=$(tmux display -p -t "$3" '#{window_id}') || exit 0
+    [ "$srcwin" = "$win" ] && exit 0
+    act=$(tmux display -p -t "$srcwin" '#{pane_id}')
+    zoomed && tmux resize-pane -Z -t "$win"
+    prev=$pane
+    for src in $(tmux list-panes -t "$srcwin" -F '#{pane_id}'); do
+      if ! tiling; then
+        tmux join-pane -h -s "$src" -t "$prev"
+      elif [ "$(mode)" = row ]; then
+        tmux join-pane -h -s "$src" -t "$win.{bottom-right}"
+      else
+        tmux join-pane -v -s "$src" -t "$win.{bottom-right}"
+      fi
+      prev=$src
+    done
+    retile
+    tmux select-pane -t "$act"
+    ;;
+  break)
+    # 当前窗格拆出去成为独立窗口，排在当前窗口后面，焦点跟过去；剩下的窗格自动重排
+    if [ "$(panes)" -lt 2 ]; then
+      tmux display "这个窗口只有一个窗格，本来就是独立窗口"
+      exit 0
+    fi
+    # 窗口名取窗格里在跑的程序；Claude Code 的进程名是版本号（2.1.296），改叫 claude，和 Alt+c 开的一致
+    name=$(tmux display -p -t "$pane" '#{pane_current_command}')
+    case "$name" in [0-9]*.*) name=claude ;; esac
+    tmux break-pane -a -s "$pane" -t "$win" -n "$name"
+    retile
+    ;;
+  *) echo "用法: $0 new|zoom|toggle|keep|mode|resized|join|pick|preview|take|break <pane_id> [row|dwm|grid|dwm2]" >&2; exit 2 ;;
 esac
 exit 0
