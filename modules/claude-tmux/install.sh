@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # name: Claude → tmux 窗口染色
-# desc: tmux 窗口编号随 Claude Code 状态变色（运行 / 等你批准 / 完成 / 出错）
+# desc: tmux 窗口编号随 Claude Code 状态变色（运行 / 等你批准 / 完成 / 出错）；重启后各窗格接回原来的对话
 # os:   linux macos
 # needs: terminal
 set -euo pipefail

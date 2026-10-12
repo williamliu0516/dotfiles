@@ -32,6 +32,15 @@ esac
 
 tmux set-option -w -t "$TMUX_PANE" @agent-state "$state" 2>/dev/null || true
 
+# 窗格记下跑的是哪个会话，tmux 存档时一起存，重启后 claude-resume.sh 用它接回原对话。
+# 每个事件都记：/clear、/resume 换了会话也跟得上，这个 hook 生效前就开着的会话下个事件也会记上
+sid="$(field session_id)"
+if [[ "$event" == SessionEnd ]]; then
+  tmux set-option -p -u -t "$TMUX_PANE" @claude-session 2>/dev/null || true
+elif [[ -n "$sid" ]]; then
+  tmux set-option -p -t "$TMUX_PANE" @claude-session "$sid" 2>/dev/null || true
+fi
+
 # 等你批准 / 跑完 / 出错时弹桌面通知，但只在你没在看这个窗口时（窗口不是当前窗口，或 Ghostty 不在前台）
 case "$state" in
   waiting) title="Claude Code 在等你" ;;
