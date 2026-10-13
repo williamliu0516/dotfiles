@@ -15,6 +15,11 @@ if [ "$OS" = macos ]; then
   # fd + ripgrep 给 fzf 用：列文件比 find 快得多，且自动跳过 .gitignore 里的东西
   # yazi 不在这里，两个系统都下预编译版，见下面的 1d
   pkg_install tmux mosh fzf eza bat zoxide poppler btop fd ripgrep
+  # 已经装过的 tmux 上面不会动。3.7c 窗格标题栏有个让 server 卡死的 bug（见 tmux.conf"窗格边框与标题栏"），老于 3.8 就升级
+  if have tmux && tmux -V | awk '{ split($2, v, "."); exit !(v[1] + 0 < 3 || (v[1] == 3 && v[2] + 0 < 8)) }'; then
+    run_step "brew upgrade tmux" brew upgrade tmux && ok "tmux 升到了 $(tmux -V | awk '{print $2}')" \
+      || warn "tmux 升级失败，还是 $(tmux -V | awk '{print $2}')"
+  fi
 else
   # Linux 上 apt 只装"必须是系统级"的东西：zsh（要写进 /etc/shells 当登录 shell）、mosh（ssh 远程命令
   # 要能直接找到 mosh-server）、libnotify-bin（notify-send 走桌面的 D-Bus）、git/curl/fontconfig。
