@@ -100,7 +100,7 @@ Sessions auto-save every 15 minutes and restore on start (tmux-resurrect + conti
 
 `mosh` is installed with the terminal module, so Blink Shell, Termius or Moshi on an iPad can connect over mosh and survive sleeping the iPad or changing networks. Two things make that work out of the box: `config/zsh/zshenv` is sourced by every zsh, including the non-interactive one sshd starts for `mosh-server new`, so Homebrew is on the PATH and a UTF-8 `LANG` is set even when the client sends none. Nothing else to configure: mosh uses UDP 60000–61000 on the server, which a Tailscale link passes as-is. Pair it with a startup command of `tmux new -As main` in the client and you land in the same session every time.
 
-The status bar shows CPU, memory in use and GPU load (amber above 70%, red above 90%; the GPU segment appears where it can be read — Apple Silicon, NVIDIA, AMD), then battery level with time to empty, or time to full while charging (`/sys` and upower on Linux, `pmset` on macOS). On a desktop with no battery the segment disappears entirely.
+The status bar starts with the Claude Code account this tmux is billing (`personal`, or the organization's name; from [claude-status-bar](https://github.com/williamliu0516/claude-status-bar)'s `--account`, so Claude panes don't repeat it), then CPU, memory in use and GPU load (amber above 70%, red above 90%; the GPU segment appears where it can be read — Apple Silicon, NVIDIA, AMD), then battery level with time to empty, or time to full while charging (`/sys` and upower on Linux, `pmset` on macOS). On a desktop with no battery the segment disappears entirely.
 
 ### GNOME desktop
 
@@ -140,6 +140,7 @@ bin/
   tmux/claude-resume.sh resurrect hooks: save each pane's Claude session, resume it after a restore
   tmux/save-pane.sh     dump the current pane's scrollback to a file
   tmux/battery.sh       battery segment for the status bar
+  tmux/claude-account.sh  the Claude Code account this tmux uses, for the status bar
 index.html           the page at xiaweiliu.com/dotfiles
 ```
 
