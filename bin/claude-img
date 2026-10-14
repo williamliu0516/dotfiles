@@ -1,0 +1,138 @@
+#!/usr/bin/env python3
+"""claude-img：inline-images 插件（config/claude/inline-images）的帮手。
+
+  claude-img png MIME   stdin 是一张 base64 图片：转成 PNG 存进 ~/.cache/claude-img/png，
+                        打印 {"path","w","h","cw","ch","kitty"}：文件、像素宽高、终端一格的像素宽高（不知道时为 0），
+                        以及现在有没有能显示 kitty 图片的终端在看这个窗格
+
+kitty 图片协议只收 PNG（或裸像素），Claude 读到的常是 JPEG / WebP，所以要转一道；
+太大的图缩到长边 MAX_PX，省外层终端的内存。缓存按内容的 SHA1 命名，同一张图只转一次，14 天没用到的删掉。
+"""
+import base64
+import hashlib
+import json
+import os
+import random
+import shutil
+import subprocess
+import sys
+import time
+
+DIR = os.path.expanduser("~/.cache/claude-img/png")
+MAX_PX = 1600
+KEEP_DAYS = 14
+KITTY_TERMS = ("xterm-ghostty", "xterm-kitty")
+
+
+def png_size(path):
+    try:
+        with open(path, "rb") as f:
+            head = f.read(24)
+    except OSError:
+        return None
+    if head[:8] != b"\x89PNG\r\n\x1a\n" or head[12:16] != b"IHDR":
+        return None
+    return int.from_bytes(head[16:20], "big"), int.from_bytes(head[20:24], "big")
+
+
+def convert(src, dst, maxpx=None):
+    """转成 PNG，maxpx 给了就把长边缩到这么大。成功返回 True。"""
+    tmp = dst + ".tmp.png"
+    if sys.platform == "darwin":
+        cmd = ["sips", "-s", "format", "png", *(["-Z", str(maxpx)] if maxpx else []), src, "--out", tmp]
+    else:
+        tool = shutil.which("magick") or shutil.which("convert")
+        if not tool:
+            return False
+        cmd = [tool, src + "[0]", *(["-resize", f"{maxpx}x{maxpx}>"] if maxpx else []), "png:" + tmp]
+    ok = subprocess.run(cmd, capture_output=True).returncode == 0 and png_size(tmp) is not None
+    if ok:
+        os.replace(tmp, dst)
+    else:
+        try:
+            os.unlink(tmp)
+        except OSError:
+            pass
+    return ok
+
+
+def tmux(*args):
+    r = subprocess.run(["tmux", *args], capture_output=True, text=True)
+    return r.stdout.strip() if r.returncode == 0 else ""
+
+
+def terminal():
+    """(一格宽, 一格高, 有没有 kitty 终端在看)。tmux 里看连着这个会话的终端，tmux 外看 TERM。"""
+    pane = os.environ.get("TMUX_PANE")
+    if not (os.environ.get("TMUX") and pane):
+        return 0, 0, os.environ.get("TERM") in KITTY_TERMS
+    cw = ch = 0
+    kitty = False
+    for line in tmux("list-clients", "-t", pane, "-F", "#{client_termname} #{client_cell_width} #{client_cell_height}").splitlines():
+        name, _, size = line.partition(" ")
+        if name in KITTY_TERMS:
+            kitty = True
+            try:
+                w, h = map(int, size.split())
+            except ValueError:
+                continue
+            if w > 0 and h > 0 and not cw:
+                cw, ch = w, h
+    return cw, ch, kitty
+
+
+def prune():
+    cutoff = time.time() - KEEP_DAYS * 86400
+    for name in os.listdir(DIR):
+        p = os.path.join(DIR, name)
+        try:
+            if os.path.getatime(p) < cutoff and os.path.getmtime(p) < cutoff:
+                os.unlink(p)
+        except OSError:
+            pass
+
+
+def png(mime):
+    try:
+        raw = base64.b64decode(sys.stdin.read())
+    except ValueError:
+        sys.exit("claude-img: stdin 不是 base64")
+    os.makedirs(DIR, exist_ok=True)
+    out = os.path.join(DIR, hashlib.sha1(raw).hexdigest() + ".png")
+    if png_size(out) is None:
+        src = out[:-4] + ".src"
+        with open(src, "wb") as f:
+            f.write(raw)
+        try:
+            size = png_size(src)
+            if size is None:                 # JPEG / WebP / GIF：先原样转 PNG，太大再缩（sips -Z 会把小图放大）
+                if not convert(src, out):
+                    sys.exit(f"claude-img: 转不成 PNG（{mime}）")
+                if max(png_size(out)) > MAX_PX:
+                    convert(out, out, MAX_PX)
+            elif max(size) > MAX_PX:
+                if not convert(src, out, MAX_PX):
+                    shutil.copyfile(src, out)
+            else:
+                shutil.copyfile(src, out)
+        finally:
+            os.unlink(src)
+        if random.random() < 0.05:
+            prune()
+    else:
+        os.utime(out)
+    w, h = png_size(out)
+    cw, ch, kitty = terminal()
+    print(json.dumps({"path": out, "w": w, "h": h, "cw": cw, "ch": ch, "kitty": kitty}))
+
+
+def main():
+    args = sys.argv[1:]
+    if len(args) == 2 and args[0] == "png":
+        png(args[1])
+    else:
+        sys.exit(__doc__.strip())
+
+
+if __name__ == "__main__":
+    main()

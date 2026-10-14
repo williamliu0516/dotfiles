@@ -170,6 +170,22 @@ tmux() {
   if (( $# )) || [[ -n $TMUX ]]; then command tmux "$@"; else "$HOME/.local/bin/tmux/attach.sh"; fi
 }
 
+# ===== Claude Code：tmux 里也能在对话中直接看图（Ghostty / kitty）=====
+# Claude Code 在 tmux 里不画图，强开的话 tmux 会把图片指令吞掉。tmux-kgp 夹在中间把图片指令转给外层终端，
+# 并按会话分开图片 id；inline-images 插件把读到、截到的图画在 "Read N files" 那一行下面。细节见 bin/tmux-kgp
+if (( $+commands[tmux-kgp] )); then
+  claude() {
+    if [[ -n $TMUX && -t 0 && -t 1 ]]; then
+      # 用改名叫 claude 的 Python 跑，窗格边框上显示 claude 而不是 Python；副本坏了（Python 升级后）就用 python3
+      local py=$HOME/.local/share/claude-img/claude
+      "$py" -c '' 2>/dev/null || py=python3
+      CLAUDE_CODE_FORCE_TERMINAL_IMAGES=1 "$py" "${commands[tmux-kgp]}" claude "$@"
+    else
+      command claude "$@"
+    fi
+  }
+fi
+
 # ===== micromamba =====
 export MAMBA_EXE="$HOME/.local/bin/micromamba"
 export MAMBA_ROOT_PREFIX="$HOME/micromamba"

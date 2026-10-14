@@ -1,0 +1,378 @@
+#!/usr/bin/env python3
+"""tmux-kgp CMD [ARGS]：在 tmux 里跑 CMD，让它的 kitty 图片能穿过 tmux 显示在 Ghostty / kitty 里。
+
+tmux 不认 kitty 图片协议（kitty graphics protocol）：程序直接写的 APC（\\e_G…\\e\\\\）会被 tmux
+当成窗格标题吞掉。这里在 CMD 和 tmux 之间夹一个 pty，CMD 的输出原样转发，只改两处：
+
+1. 每条图片指令包成 tmux passthrough（\\ePtmux;…\\e\\\\），tmux 原样转给外层终端（要 allow-passthrough on）。
+2. 图片 id 按会话分开。图片存在外层终端里，所有窗格共用一套 id；Claude Code 在 tmux 里只用 256 色，
+   id 也就只有 8 位、每个会话都从 1 数起，两个窗格会互相顶掉对方的图。所以每个 tmux-kgp 领一个
+   1～255 的号 H，指令里的 i=N 改成 H<<24|N，每个占位符（U+10EEEE + 行、列两个附加符号）后面补第三个
+   附加符号 H：kitty 规定第三个附加符号就是 id 的最高字节。
+
+Claude Code 要配 CLAUDE_CODE_FORCE_TERMINAL_IMAGES=1 才会在 tmux 里画图（zshrc 里的 claude 函数一起设好）。
+CMD 按 Ctrl+Z 自己挂起时，这里跟着挂起，fg 回来再叫醒它。
+"""
+import errno
+import fcntl
+import os
+import re
+import select
+import shutil
+import signal
+import sys
+import termios
+import tty
+
+APC = b"\x1b_G"
+ST = b"\x1b\\"
+PH = "\U0010EEEE".encode()
+MAX_PENDING = 32 << 20   # 一条图片指令超过这么大就当它坏了，原样放出去
+IDS = os.path.expanduser("~/.cache/claude-img/kgp-ids")
+LAUNCHER = os.path.expanduser("~/.local/share/claude-img/claude")
+
+# kitty 的 rowcolumn-diacritics.txt：第 n 个附加符号表示数字 n
+DIACRITICS = [
+    0x0305, 0x030D, 0x030E, 0x0310, 0x0312, 0x033D, 0x033E, 0x033F, 0x0346, 0x034A, 0x034B, 0x034C, 0x0350,
+    0x0351, 0x0352, 0x0357, 0x035B, 0x0363, 0x0364, 0x0365, 0x0366, 0x0367, 0x0368, 0x0369, 0x036A, 0x036B,
+    0x036C, 0x036D, 0x036E, 0x036F, 0x0483, 0x0484, 0x0485, 0x0486, 0x0487, 0x0592, 0x0593, 0x0594, 0x0595,
+    0x0597, 0x0598, 0x0599, 0x059C, 0x059D, 0x059E, 0x059F, 0x05A0, 0x05A1, 0x05A8, 0x05A9, 0x05AB, 0x05AC,
+    0x05AF, 0x05C4, 0x0610, 0x0611, 0x0612, 0x0613, 0x0614, 0x0615, 0x0616, 0x0617, 0x0657, 0x0658, 0x0659,
+    0x065A, 0x065B, 0x065D, 0x065E, 0x06D6, 0x06D7, 0x06D8, 0x06D9, 0x06DA, 0x06DB, 0x06DC, 0x06DF, 0x06E0,
+    0x06E1, 0x06E2, 0x06E4, 0x06E7, 0x06E8, 0x06EB, 0x06EC, 0x0730, 0x0732, 0x0733, 0x0735, 0x0736, 0x073A,
+    0x073D, 0x073F, 0x0740, 0x0741, 0x0743, 0x0745, 0x0747, 0x0749, 0x074A, 0x07EB, 0x07EC, 0x07ED, 0x07EE,
+    0x07EF, 0x07F0, 0x07F1, 0x07F3, 0x0816, 0x0817, 0x0818, 0x0819, 0x081B, 0x081C, 0x081D, 0x081E, 0x081F,
+    0x0820, 0x0821, 0x0822, 0x0823, 0x0825, 0x0826, 0x0827, 0x0829, 0x082A, 0x082B, 0x082C, 0x082D, 0x0951,
+    0x0953, 0x0954, 0x0F82, 0x0F83, 0x0F86, 0x0F87, 0x135D, 0x135E, 0x135F, 0x17DD, 0x193A, 0x1A17, 0x1A75,
+    0x1A76, 0x1A77, 0x1A78, 0x1A79, 0x1A7A, 0x1A7B, 0x1A7C, 0x1B6B, 0x1B6D, 0x1B6E, 0x1B6F, 0x1B70, 0x1B71,
+    0x1B72, 0x1B73, 0x1CD0, 0x1CD1, 0x1CD2, 0x1CDA, 0x1CDB, 0x1CE0, 0x1DC0, 0x1DC1, 0x1DC3, 0x1DC4, 0x1DC5,
+    0x1DC6, 0x1DC7, 0x1DC8, 0x1DC9, 0x1DCB, 0x1DCC, 0x1DD1, 0x1DD2, 0x1DD3, 0x1DD4, 0x1DD5, 0x1DD6, 0x1DD7,
+    0x1DD8, 0x1DD9, 0x1DDA, 0x1DDB, 0x1DDC, 0x1DDD, 0x1DDE, 0x1DDF, 0x1DE0, 0x1DE1, 0x1DE2, 0x1DE3, 0x1DE4,
+    0x1DE5, 0x1DE6, 0x1DFE, 0x20D0, 0x20D1, 0x20D4, 0x20D5, 0x20D6, 0x20D7, 0x20DB, 0x20DC, 0x20E1, 0x20E7,
+    0x20E9, 0x20F0, 0x2CEF, 0x2CF0, 0x2CF1, 0x2DE0, 0x2DE1, 0x2DE2, 0x2DE3, 0x2DE4, 0x2DE5, 0x2DE6, 0x2DE7,
+    0x2DE8, 0x2DE9, 0x2DEA, 0x2DEB, 0x2DEC, 0x2DED, 0x2DEE, 0x2DEF, 0x2DF0, 0x2DF1, 0x2DF2, 0x2DF3, 0x2DF4,
+    0x2DF5, 0x2DF6, 0x2DF7, 0x2DF8, 0x2DF9, 0x2DFA, 0x2DFB, 0x2DFC, 0x2DFD, 0x2DFE, 0x2DFF, 0xA66F, 0xA67C,
+    0xA67D, 0xA6F0, 0xA6F1, 0xA8E0, 0xA8E1, 0xA8E2, 0xA8E3, 0xA8E4, 0xA8E5, 0xA8E6, 0xA8E7, 0xA8E8, 0xA8E9,
+    0xA8EA, 0xA8EB, 0xA8EC, 0xA8ED, 0xA8EE, 0xA8EF, 0xA8F0, 0xA8F1, 0xAAB0, 0xAAB2, 0xAAB3, 0xAAB7, 0xAAB8,
+    0xAABE, 0xAABF, 0xAAC1, 0xFE20, 0xFE21, 0xFE22, 0xFE23, 0xFE24, 0xFE25, 0xFE26, 0xFE2F, 0x10A0F, 0x10A38,
+    0x1D185, 0x1D186, 0x1D187, 0x1D188, 0x1D189, 0x1D1AA, 0x1D1AB, 0x1D1AC, 0x1D1AD, 0x1D242, 0x1D243, 0x1D244,
+]
+DIACRITIC_SET = set(DIACRITICS)
+ID_RE = re.compile(rb"(?<![A-Za-z])i=(\d+)")
+
+
+def utf8_len(b):
+    return 1 if b < 0x80 else 2 if b < 0xE0 else 3 if b < 0xF0 else 4
+
+
+class Rewriter:
+    def __init__(self, high):
+        self.high = high
+        self.mark = chr(DIACRITICS[high]).encode()
+        self.pending = b""
+
+    def wrap(self, seq):
+        ctrl, sep, payload = seq[3:-2].partition(b";")
+        ctrl = ID_RE.sub(lambda m: b"i=%d" % (self.high << 24 | int(m.group(1)) & 0xFFFFFF), ctrl)
+        seq = APC + ctrl + sep + payload + ST
+        return b"\x1bPtmux;" + seq.replace(b"\x1b", b"\x1b\x1b") + ST
+
+    def placeholder(self, data, p):
+        """p 处是 U+10EEEE：返回 (改好的字节, 下一个位置)；后面不够判断时返回 None。"""
+        q = p + len(PH)
+        for _ in range(2):
+            if q >= len(data):
+                return None
+            n = utf8_len(data[q])
+            if q + n > len(data):
+                return None
+            try:
+                cp = ord(data[q:q + n].decode())
+            except UnicodeDecodeError:
+                return data[p:p + len(PH)], p + len(PH)
+            if cp not in DIACRITIC_SET:
+                return data[p:q], q
+            q += n
+        return data[p:q] + self.mark, q
+
+    def feed(self, data):
+        data = self.pending + data
+        self.pending = b""
+        out = []
+        i = 0
+        while True:
+            a = data.find(APC, i)
+            p = data.find(PH, i)
+            if a < 0 and p < 0:
+                # 末尾可能是半个 APC 或半个占位符，留到下一块再看
+                for cut in range(min(len(PH) - 1, len(data) - i), 0, -1):
+                    tail = data[len(data) - cut:]
+                    if APC.startswith(tail) or PH.startswith(tail):
+                        out.append(data[i:len(data) - cut])
+                        self.pending = tail
+                        return b"".join(out)
+                out.append(data[i:])
+                return b"".join(out)
+            if p >= 0 and (a < 0 or p < a):
+                out.append(data[i:p])
+                r = self.placeholder(data, p)
+                if r is None:
+                    self.pending = data[p:]
+                    return b"".join(out)
+                out.append(r[0])
+                i = r[1]
+                continue
+            k = data.find(ST, a + len(APC))
+            out.append(data[i:a])
+            if k < 0:
+                if len(data) - a > MAX_PENDING:
+                    out.append(data[a:])
+                else:
+                    self.pending = data[a:]
+                return b"".join(out)
+            out.append(self.wrap(data[a:k + 2]))
+            i = k + 2
+
+
+def claim_id():
+    """领一个没人用的 1～255：~/.cache/claude-img/kgp-ids/<号> 里记着领它的进程。"""
+    os.makedirs(IDS, exist_ok=True)
+    with open(os.path.join(IDS, ".lock"), "w") as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        oldest = None
+        for h in range(1, 256):
+            path = os.path.join(IDS, str(h))
+            try:
+                pid = int(open(path).read().strip() or 0)
+                os.kill(pid, 0)
+                mtime = os.path.getmtime(path)
+                if oldest is None or mtime < oldest[0]:
+                    oldest = (mtime, h)
+                continue
+            except (OSError, ValueError):
+                pass
+            open(path, "w").write(str(os.getpid()))
+            return h
+        h = oldest[1]   # 255 个全占着：借用最早那个
+        open(os.path.join(IDS, str(h)), "w").write(str(os.getpid()))
+        return h
+
+
+def release_id(h):
+    path = os.path.join(IDS, str(h))
+    try:
+        if open(path).read().strip() == str(os.getpid()):
+            os.unlink(path)
+    except OSError:
+        pass
+
+
+def keeper(slave, argv):
+    """新 pty 会话的首进程，CMD 是它的子进程、在自己的进程组里当前台。
+
+    不能让 CMD 自己当会话首进程：那样它的进程组没有同会话的父进程，算"孤儿进程组"，
+    Claude Code 按 Ctrl+Z 给自己发的 SIGTSTP 会被内核直接丢掉，挂不起来。
+    CMD 挂起时这里用 SIGSTOP 停住自己，外面的 tmux-kgp 看到了就跟着挂起；被叫醒后再叫醒 CMD。
+    """
+    os.setsid()
+    fcntl.ioctl(slave, termios.TIOCSCTTY, 0)
+    signal.signal(signal.SIGTTOU, signal.SIG_IGN)
+    cpid = os.fork()
+    if cpid == 0:
+        os.setpgid(0, 0)
+        os.tcsetpgrp(slave, os.getpid())
+        signal.signal(signal.SIGTTOU, signal.SIG_DFL)
+        for fd in (0, 1, 2):
+            os.dup2(slave, fd)
+        if slave > 2:
+            os.close(slave)
+        try:
+            os.execvp(argv[0], argv)
+        except OSError as e:
+            os.write(2, f"tmux-kgp: {argv[0]}: {e.strerror}\n".encode())
+            os._exit(127)
+    try:
+        os.setpgid(cpid, cpid)
+    except OSError:
+        pass
+    for sig in (signal.SIGTERM, signal.SIGHUP, signal.SIGINT):
+        signal.signal(sig, lambda n, _f: os.killpg(cpid, n))
+    while True:
+        try:
+            _, st = os.waitpid(cpid, os.WUNTRACED)
+        except InterruptedError:
+            continue
+        except ChildProcessError:
+            os._exit(1)
+        if os.WIFSTOPPED(st):
+            os.kill(os.getpid(), signal.SIGSTOP)
+            try:
+                os.tcsetpgrp(slave, cpid)
+                os.killpg(cpid, signal.SIGCONT)
+            except OSError:
+                pass
+            continue
+        code = os.waitstatus_to_exitcode(st)
+        os._exit(code if code >= 0 else 128 - code)
+
+
+def refresh_launcher():
+    """macOS：tmux 窗格边框、拆窗口时的窗口名用的是前台进程名，套了这层之后就成了 Python。
+    Python.app 启动器的副本改名叫 claude，用它跑这个脚本，进程名就是 claude（软链接不行，系统取的是链接目标的名字）。
+    zshrc 的 claude 函数用它；Homebrew 升级 Python 后旧副本会坏，这里每次跑都对一下，变了就重新拷。"""
+    if sys.platform != "darwin":
+        return
+    src = os.path.join(sys.base_prefix, "Resources/Python.app/Contents/MacOS/Python")
+    try:
+        st = os.stat(src)
+        try:
+            cur = os.stat(LAUNCHER)
+            if (cur.st_size, int(cur.st_mtime)) == (st.st_size, int(st.st_mtime)):
+                return
+        except OSError:
+            pass
+        os.makedirs(os.path.dirname(LAUNCHER), exist_ok=True)
+        tmp = LAUNCHER + ".tmp"
+        shutil.copy2(src, tmp)
+        os.replace(tmp, LAUNCHER)
+    except OSError:
+        pass
+
+
+def winsize(fd):
+    try:
+        return fcntl.ioctl(fd, termios.TIOCGWINSZ, b"\0" * 8)
+    except OSError:
+        return None
+
+
+def write_all(fd, data):
+    while data:
+        try:
+            n = os.write(fd, data)
+        except InterruptedError:
+            continue
+        data = data[n:]
+
+
+def main():
+    argv = sys.argv[1:]
+    if argv == ["--launcher"]:           # 只更新改名的启动器（安装时用）
+        refresh_launcher()
+        return
+    if not argv:
+        sys.exit(__doc__.strip())
+    if not os.environ.get("TMUX") or not os.isatty(0) or not os.isatty(1):
+        os.execvp(argv[0], argv)
+
+    refresh_launcher()
+    high = claim_id()
+    master, slave = os.openpty()
+    size = winsize(0)
+    if size:
+        fcntl.ioctl(slave, termios.TIOCSWINSZ, size)
+    pid = os.fork()
+    if pid == 0:
+        os.close(master)
+        keeper(slave, argv)
+    os.close(slave)
+
+    # 信号一律只往自管道里写一个字节，主循环里处理，select 不用管被打断
+    wake_r, wake_w = os.pipe()
+    for fd in (wake_r, wake_w):
+        fcntl.fcntl(fd, fcntl.F_SETFL, os.O_NONBLOCK)
+    got = set()
+
+    def on_signal(n, _f):
+        got.add(n)
+        try:
+            os.write(wake_w, b"x")
+        except OSError:
+            pass
+
+    for sig in (signal.SIGWINCH, signal.SIGCHLD, signal.SIGTERM, signal.SIGHUP, signal.SIGCONT):
+        signal.signal(sig, on_signal)
+
+    def resize():
+        s = winsize(0)
+        if s:
+            try:
+                fcntl.ioctl(master, termios.TIOCSWINSZ, s)
+            except OSError:
+                pass
+
+    saved = termios.tcgetattr(0)
+    tty.setraw(0)
+    rw = Rewriter(high)
+    status = None
+    try:
+        while status is None:
+            try:
+                ready, _, _ = select.select([0, master, wake_r], [], [])
+            except InterruptedError:
+                continue
+            if wake_r in ready:
+                try:
+                    os.read(wake_r, 1024)
+                except OSError:
+                    pass
+                sigs = set()
+                while got:
+                    sigs.add(got.pop())
+                if signal.SIGWINCH in sigs:
+                    resize()
+                if sigs & {signal.SIGTERM, signal.SIGHUP}:
+                    os.kill(pid, (sigs & {signal.SIGTERM, signal.SIGHUP}).pop())
+                if signal.SIGCHLD in sigs:
+                    done, st = os.waitpid(pid, os.WNOHANG | os.WUNTRACED)
+                    if done and os.WIFSTOPPED(st):
+                        # CMD 挂起了（Claude Code 的 Ctrl+Z）：我们也挂起，把终端交还给 shell
+                        termios.tcsetattr(0, termios.TCSADRAIN, saved)
+                        signal.signal(signal.SIGTSTP, signal.SIG_DFL)
+                        os.kill(os.getpid(), signal.SIGTSTP)
+                        # fg 回来了
+                        tty.setraw(0)
+                        resize()
+                        os.kill(pid, signal.SIGCONT)
+                    elif done:
+                        status = st
+            if master in ready:
+                try:
+                    data = os.read(master, 65536)
+                except OSError as e:
+                    if e.errno != errno.EIO:
+                        raise
+                    data = b""
+                if data:
+                    write_all(1, rw.feed(data))
+                elif status is None:
+                    _, status = os.waitpid(pid, 0)
+            if 0 in ready and status is None:
+                data = os.read(0, 65536)
+                if not data:
+                    os.kill(pid, signal.SIGHUP)
+                    _, status = os.waitpid(pid, 0)
+                else:
+                    write_all(master, data)
+        # 子进程退出后 pty 里可能还剩一点输出
+        while True:
+            r, _, _ = select.select([master], [], [], 0)
+            if not r:
+                break
+            try:
+                data = os.read(master, 65536)
+            except OSError:
+                break
+            if not data:
+                break
+            write_all(1, rw.feed(data))
+        write_all(1, rw.pending)
+    finally:
+        termios.tcsetattr(0, termios.TCSADRAIN, saved)
+        release_id(high)
+    code = os.waitstatus_to_exitcode(status) if status is not None else 1
+    sys.exit(code if code >= 0 else 128 - code)
+
+
+if __name__ == "__main__":
+    main()
