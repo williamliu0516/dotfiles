@@ -253,6 +253,7 @@ gsettings_append() {  # gsettings_append schema key value [schemadir]
 }
 
 # 往 ~/.claude/settings.json 注册 Claude Code hook（async）：claude_hook 命令 超时秒数 事件...
+# 要拦命令的 hook 不能 async：前面加 CLAUDE_HOOK_SYNC=1。
 # 事件写成 PreToolUse:* 就带 matcher。按命令去重：事件里已经有这条命令就跳过，
 # 别人注册的 hook（键盘屏等）原样保留——不能用 setdefault，事件已被占用时会整个漏掉。
 # 有改动时先备份成 settings.json.bak；输出 changed 或 unchanged
@@ -269,7 +270,9 @@ for spec in events:
     groups = hooks.setdefault(event, [])
     if any(h.get("command") == cmd for g in groups for h in g.get("hooks", [])):
         continue
-    entry = {"type": "command", "command": cmd, "async": True, "timeout": timeout}
+    entry = {"type": "command", "command": cmd, "timeout": timeout}
+    if not os.environ.get("CLAUDE_HOOK_SYNC"):
+        entry["async"] = True
     groups.append({**({"matcher": matcher} if matcher else {}), "hooks": [entry]})
     changed = True
 if not changed:
