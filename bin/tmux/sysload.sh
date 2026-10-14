@@ -7,9 +7,9 @@ os=$(uname -s)
 # ── CPU（整机平均，百分比）────────────────────────────────
 cpu=""
 if [ "$os" = Darwin ]; then
-  # 各进程 %cpu 求和再除以核数：瞬时值，不用像 top 那样等 1 秒采样
-  n=$(sysctl -n hw.ncpu)
-  cpu=$(ps -A -o %cpu= | awk -v n="$n" '{s+=$1} END{printf "%d", s/n}')
+  # iostat 读整机 CPU 计数器，采样 1 秒取第二行。不用 ps 逐个进程求和：一次开几台 iOS 模拟器（几千个进程）时
+  # ps 会卡在内核里十几分钟，这一段就一直空着（2026-10-13）
+  cpu=$(iostat -n0 -C -c 2 -w 1 2>/dev/null | awk 'END{if ($3 ~ /^[0-9]+$/) print 100-$3}')
 else
   # /proc/stat 两次采样求差；上一次的值存在文件里，status-interval 决定采样间隔
   cache="${XDG_RUNTIME_DIR:-/tmp}/tmux-sysload-cpu.$UID"
