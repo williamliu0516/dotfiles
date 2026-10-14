@@ -10,9 +10,13 @@ tmux 不认 kitty 图片协议（kitty graphics protocol）：程序直接写的
    1～255 的号 H，指令里的 i=N 改成 H<<24|N，每个占位符（U+10EEEE + 行、列两个附加符号）后面补第三个
    附加符号 H：kitty 规定第三个附加符号就是 id 的最高字节。
 
+3. 用文件传的图（t=f，inline-images 插件就是这样传的）按改好的 id 登记到 ~/.cache/webmosh/kitty/<id>，一行
+   "<列> <行> <PNG 路径>"：webmosh 的网页终端（mosh 不带图片）照这个向本机要图，画在占位符上。
+
 Claude Code 要配 CLAUDE_CODE_FORCE_TERMINAL_IMAGES=1 才会在 tmux 里画图（zshrc 里的 claude 函数一起设好）。
 CMD 按 Ctrl+Z 自己挂起时，这里跟着挂起，fg 回来再叫醒它。
 """
+import base64
 import errno
 import fcntl
 import os
@@ -31,6 +35,8 @@ ST = b"\x1b\\"
 PH = "\U0010EEEE".encode()
 MAX_PENDING = 32 << 20   # 一条图片指令超过这么大就当它坏了，原样放出去
 IDS = os.path.expanduser("~/.cache/claude-img/kgp-ids")
+SPOOL = os.path.join(os.environ.get("XDG_CACHE_HOME") or os.path.expanduser("~/.cache"), "webmosh", "kitty")
+SPOOL_DAYS = 14
 LAUNCHER = os.path.expanduser("~/.local/share/claude-img/claude")
 
 # kitty 的 rowcolumn-diacritics.txt：第 n 个附加符号表示数字 n
@@ -76,6 +82,7 @@ class Rewriter:
     def wrap(self, seq):
         ctrl, sep, payload = seq[3:-2].partition(b";")
         ctrl = ID_RE.sub(lambda m: b"i=%d" % (self.high << 24 | int(m.group(1)) & 0xFFFFFF), ctrl)
+        spool(ctrl, payload)
         seq = APC + ctrl + sep + payload + ST
         return b"\x1bPtmux;" + seq.replace(b"\x1b", b"\x1b\x1b") + ST
 
@@ -134,6 +141,39 @@ class Rewriter:
                 return b"".join(out)
             out.append(self.wrap(data[a:k + 2]))
             i = k + 2
+
+
+def spool(ctrl, payload):
+    """一张用文件传的 PNG（a=T、t=f、f=100）登记给 webmosh：~/.cache/webmosh/kitty/<id> = "<列> <行> <路径>"。"""
+    keys = dict(kv.split(b"=", 1) for kv in ctrl.split(b",") if b"=" in kv)
+    if keys.get(b"t") != b"f" or keys.get(b"f") != b"100" or keys.get(b"a", b"t") not in (b"T", b"t"):
+        return
+    try:
+        image, cols, rows = int(keys[b"i"]), int(keys.get(b"c", b"0")), int(keys.get(b"r", b"0"))
+        path = base64.b64decode(payload).decode()
+    except (KeyError, ValueError):
+        return
+    if not path.startswith("/") or "\n" in path:
+        return
+    try:
+        os.makedirs(SPOOL, exist_ok=True)
+        tmp = os.path.join(SPOOL, f".{image}.tmp")
+        with open(tmp, "w") as f:
+            f.write(f"{cols} {rows} {path}\n")
+        os.replace(tmp, os.path.join(SPOOL, str(image)))
+    except OSError:
+        pass
+
+
+def prune_spool():
+    cutoff = time.time() - SPOOL_DAYS * 86400
+    try:
+        for name in os.listdir(SPOOL):
+            p = os.path.join(SPOOL, name)
+            if os.path.getmtime(p) < cutoff:
+                os.unlink(p)
+    except OSError:
+        pass
 
 
 def claim_id():
@@ -337,6 +377,7 @@ def main():
     refresh_launcher()
     os.makedirs(IDS, exist_ok=True)
     reap_orphans()
+    prune_spool()
     high = claim_id()
     master, slave = os.openpty()
     size = winsize(0)

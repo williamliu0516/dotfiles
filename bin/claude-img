@@ -3,7 +3,8 @@
 
   claude-img png MIME   stdin 是一张 base64 图片：转成 PNG 存进 ~/.cache/claude-img/png，
                         打印 {"path","w","h","cw","ch","kitty"}：文件、像素宽高、终端一格的像素宽高（不知道时为 0），
-                        以及现在有没有能显示 kitty 图片的终端在看这个窗格
+                        以及现在有没有能显示 kitty 图片的终端在看这个窗格：Ghostty / kitty，或者 webmosh 的网页终端
+                        （它的会话环境里有 WEBMOSH=1；mosh 不带图片，网页照 tmux-kgp 的登记向本机要）
 
 kitty 图片协议只收 PNG（或裸像素），Claude 读到的常是 JPEG / WebP，所以要转一道；
 太大的图缩到长边 MAX_PX，省外层终端的内存。缓存按内容的 SHA1 命名，同一张图只转一次，14 天没用到的删掉。
@@ -68,17 +69,25 @@ def terminal():
         return 0, 0, os.environ.get("TERM") in KITTY_TERMS
     cw = ch = 0
     kitty = False
-    for line in tmux("list-clients", "-t", pane, "-F", "#{client_termname} #{client_cell_width} #{client_cell_height}").splitlines():
-        name, _, size = line.partition(" ")
+    for line in tmux("list-clients", "-t", pane, "-F",
+                     "#{client_termname} #{client_cell_width} #{client_cell_height} #{client_pid}").splitlines():
+        f = line.split()
+        if len(f) != 4:
+            continue
+        name, w, h, pid = f[0], int(f[1] or 0), int(f[2] or 0), f[3]
         if name in KITTY_TERMS:
             kitty = True
-            try:
-                w, h = map(int, size.split())
-            except ValueError:
-                continue
             if w > 0 and h > 0 and not cw:
                 cw, ch = w, h
+        elif webmosh_client(pid):
+            kitty = True
     return cw, ch, kitty
+
+
+def webmosh_client(pid):
+    """这个 tmux 客户端是不是 webmosh 的会话里开的：webmosh-gate 和 relay 给它们的环境里放了 WEBMOSH=1。"""
+    r = subprocess.run(["ps", "-E", "-o", "command=", "-p", pid], capture_output=True, text=True)
+    return " WEBMOSH=1" in r.stdout
 
 
 def prune():
