@@ -20,8 +20,10 @@ import re
 import select
 import shutil
 import signal
+import subprocess
 import sys
 import termios
+import time
 import tty
 
 APC = b"\x1b_G"
@@ -158,6 +160,49 @@ def claim_id():
         return h
 
 
+def reap_orphans():
+    """2026-10-14 之前的 tmux-kgp 在窗格关掉后不退出，底下的 Claude 也一直留着（没有终端，谁也用不了）。
+    每次启动时扫一遍登记过的：父进程已经是 launchd（窗格里的 shell 没了）、终端也不再是哪个 tmux 窗格的，
+    连同它底下的进程一起结束。刚被关掉的窗格，ps 还会显示原来的终端名一阵子，所以要和现有窗格对一下。"""
+    procs = {}
+    try:
+        out = subprocess.run(["ps", "-axo", "pid=,ppid=,tty="], capture_output=True, text=True, timeout=5).stdout
+        panes = subprocess.run(["tmux", "list-panes", "-a", "-F", "#{pane_tty}"], capture_output=True, text=True,
+                               timeout=5)
+    except (OSError, subprocess.TimeoutExpired):
+        return
+    if panes.returncode != 0:
+        return
+    live = {t.removeprefix("/dev/") for t in panes.stdout.split()}
+    for line in out.splitlines():
+        f = line.split()
+        if len(f) == 3 and f[0].isdigit():
+            procs[int(f[0])] = (int(f[1]), f[2])
+    kids = {}
+    for pid, (ppid, _) in procs.items():
+        kids.setdefault(ppid, []).append(pid)
+    for name in os.listdir(IDS):
+        if not name.isdigit():
+            continue
+        try:
+            pid = int(open(os.path.join(IDS, name)).read().strip() or 0)
+        except (OSError, ValueError):
+            continue
+        ppid, tty_name = procs.get(pid, (None, None))
+        if pid == os.getpid() or ppid != 1 or tty_name in live:
+            continue
+        tree, todo = [], list(kids.get(pid, []))
+        while todo:
+            p = todo.pop()
+            tree.append(p)
+            todo += kids.get(p, [])
+        for p in reversed(tree):
+            try:
+                os.kill(p, signal.SIGKILL)
+            except OSError:
+                pass
+
+
 def release_id(h):
     path = os.path.join(IDS, str(h))
     try:
@@ -197,6 +242,7 @@ def keeper(slave, argv):
         pass
     for sig in (signal.SIGTERM, signal.SIGHUP, signal.SIGINT):
         signal.signal(sig, lambda n, _f: os.killpg(cpid, n))
+    signal.signal(signal.SIGUSR1, lambda n, _f: os.killpg(cpid, signal.SIGKILL))   # 外面等烦了
     while True:
         try:
             _, st = os.waitpid(cpid, os.WUNTRACED)
@@ -239,6 +285,29 @@ def refresh_launcher():
         pass
 
 
+def hang_up(master, pid):
+    """窗格没了（tmux 关了窗格或整个 server）：像终端一样挂断。关掉 pty 主端，CMD 收到 SIGHUP、读写都出错，
+    和它直接跑在被关掉的窗格里一样退出。不退的话 3 秒后 SIGTERM，再 3 秒 SIGKILL。
+    早先的版本只转发 SIGHUP 然后干等，Claude Code 不理 SIGHUP，留下没有窗格的孤儿 Claude 一直占着内存。"""
+    try:
+        os.close(master)
+    except OSError:
+        pass
+    for sig in (None, signal.SIGTERM, signal.SIGUSR1):
+        if sig:
+            try:
+                os.kill(pid, sig)
+            except OSError:
+                pass
+        for _ in range(30):
+            done, st = os.waitpid(pid, os.WNOHANG)
+            if done:
+                return st
+            time.sleep(0.1)
+    _, st = os.waitpid(pid, 0)
+    return st
+
+
 def winsize(fd):
     try:
         return fcntl.ioctl(fd, termios.TIOCGWINSZ, b"\0" * 8)
@@ -266,6 +335,8 @@ def main():
         os.execvp(argv[0], argv)
 
     refresh_launcher()
+    os.makedirs(IDS, exist_ok=True)
+    reap_orphans()
     high = claim_id()
     master, slave = os.openpty()
     size = winsize(0)
@@ -321,8 +392,12 @@ def main():
                     sigs.add(got.pop())
                 if signal.SIGWINCH in sigs:
                     resize()
-                if sigs & {signal.SIGTERM, signal.SIGHUP}:
-                    os.kill(pid, (sigs & {signal.SIGTERM, signal.SIGHUP}).pop())
+                if signal.SIGHUP in sigs:       # 窗格的终端挂断了
+                    status = hang_up(master, pid)
+                    master = None
+                    break
+                if signal.SIGTERM in sigs:
+                    os.kill(pid, signal.SIGTERM)
                 if signal.SIGCHLD in sigs:
                     done, st = os.waitpid(pid, os.WNOHANG | os.WUNTRACED)
                     if done and os.WIFSTOPPED(st):
@@ -344,18 +419,26 @@ def main():
                         raise
                     data = b""
                 if data:
-                    write_all(1, rw.feed(data))
+                    try:
+                        write_all(1, rw.feed(data))
+                    except OSError:             # 窗格的终端没了
+                        status = hang_up(master, pid)
+                        master = None
+                        break
                 elif status is None:
                     _, status = os.waitpid(pid, 0)
             if 0 in ready and status is None:
-                data = os.read(0, 65536)
-                if not data:
-                    os.kill(pid, signal.SIGHUP)
-                    _, status = os.waitpid(pid, 0)
-                else:
-                    write_all(master, data)
+                try:
+                    data = os.read(0, 65536)
+                except OSError:
+                    data = b""
+                if not data:                    # 窗格的终端没了
+                    status = hang_up(master, pid)
+                    master = None
+                    break
+                write_all(master, data)
         # 子进程退出后 pty 里可能还剩一点输出
-        while True:
+        while master is not None:
             r, _, _ = select.select([master], [], [], 0)
             if not r:
                 break
@@ -366,9 +449,13 @@ def main():
             if not data:
                 break
             write_all(1, rw.feed(data))
-        write_all(1, rw.pending)
+        if master is not None:
+            write_all(1, rw.pending)
     finally:
-        termios.tcsetattr(0, termios.TCSADRAIN, saved)
+        try:
+            termios.tcsetattr(0, termios.TCSADRAIN, saved)
+        except termios.error:
+            pass
         release_id(high)
     code = os.waitstatus_to_exitcode(status) if status is not None else 1
     sys.exit(code if code >= 0 else 128 - code)
