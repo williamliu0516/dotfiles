@@ -1,0 +1,536 @@
+#!/usr/bin/env python3
+"""claude-killguard：Claude Code 跑 pkill / killall / kill 之前，先列出会杀掉哪些进程（macOS）。
+
+  claude-killguard pre              PreToolUse hook（Bash，同步）：会杀错的命令拒绝掉，并告诉 Claude 为什么
+  claude-killguard check '<命令>'    不经过 Claude Code，看 hook 对一条命令会怎么判
+  claude-killguard                  最近拒绝过的命令
+
+2026-10-14 一个会话想停掉自己留下的孤儿脚本，写了 `pkill -f "run.sh --one" -P 1`。macOS 的 pkill 读到第一个
+pattern 就不再认选项，`-P` 和 `1` 成了另外两个 pattern：命令行里带 "1" 的进程全收到了 SIGTERM（1492 个里的 706 个），
+Docker 的虚拟机、别的会话的 xcodebuild、二十几个系统小组件都在里面。
+
+对命令里的每个 pkill / pgrep / killall / kill（$(...)、xargs、bash -c、for 循环里的也算）：
+  - pattern 后面又出现选项：拒绝。pkill、pgrep、killall 都会把它当成另一个 pattern
+  - pkill 跟了不止一个 pattern；kill -1 / 0 / 1 / 负数（所有进程、整个进程组、launchd）：拒绝
+  - pkill / killall 的 pattern 不是写死的（$变量、$(...)）：拒绝，事先列不出会杀谁
+  - pkill / killall / kill <PID> / kill $(pgrep ...) / pgrep ... | xargs kill：先用 pgrep 列出目标，
+      · 包括这个会话自己（它的 Claude、shell、tmux），或者另一个还开着的 Claude Code / Codex 会话和它起的进程：拒绝
+      · 包括 Docker、tmux / ssh / mosh、系统进程、模拟器、~/.config/claude-killguard/protect 里列的，
+        或者超过 LIMIT 个：拒绝并列出来。看过列表、确认就是要杀这些，在命令前加 KILLGUARD_OK=<个数> 再跑
+这个会话自己起的进程（Claude 的子孙进程）不算受保护的。kill -0 只是探活，不检查。
+"""
+import json
+import os
+import re
+import shlex
+import subprocess
+import sys
+from datetime import datetime
+
+LIMIT = int(os.environ.get("CLAUDE_KILLGUARD_LIMIT", "20"))
+DIR = os.path.expanduser("~/.cache/claude-killguard")
+LOG = os.path.join(DIR, "log")
+PROTECT_FILE = os.path.expanduser("~/.config/claude-killguard/protect")  # 每行一个正则，匹配进程的完整命令行
+
+TRIGGER = re.compile(r"\b(pkill|pgrep|killall|kill)\b")
+AGENT = re.compile(r"(^|/)(claude|codex)(\.js)?(\s|$)|(^|/)tmux-kgp\s")
+GROUPS = [
+    ("Docker", re.compile(r"/Docker\.app/|(^|/)com\.docker\.")),
+    ("tmux / ssh / mosh / login shell", re.compile(r"(^|/)(tmux|sshd|sshd-session|mosh-server|login)(:|\s|$)|^-\w*sh(\s|$)")),
+    ("macOS system process", re.compile(r"^/(System|usr/libexec|usr/sbin|Library/Apple)/")),
+    ("iOS simulator: stop yours with xcrun simctl shutdown <udid>", re.compile(r"CoreSimulator|launchd_sim|/Simulator\.app/")),
+]
+SIGNALS = set("HUP INT QUIT ILL TRAP ABRT EMT FPE KILL BUS SEGV SYS PIPE ALRM TERM URG STOP TSTP CONT CHLD TTIN TTOU "
+              "IO XCPU XFSZ VTALRM PROF WINCH INFO USR1 USR2".split())
+# BSD 的选项里带参数的那些（man pkill / man killall）
+PGREP_VALUE, KILLALL_VALUE = set("FGPUdgtu"), set("utc")
+# 跑在前面、真正的命令在后面的：sudo pkill、xargs kill、timeout 5 kill、if pgrep ...
+WRAPPERS = {"sudo", "command", "builtin", "exec", "nohup", "time", "env", "nice", "timeout", "gtimeout", "xargs",
+            "then", "do", "else", "elif", "if", "while", "until", "!", "{"}
+WRAPPER_VALUE = {"xargs": {"-n", "-I", "-L", "-P", "-s", "-E", "-d", "-J", "-R", "-S"}, "sudo": {"-u", "-g", "-C", "-p"},
+                 "nice": {"-n"}, "env": {"-u", "-P", "-S"}}
+PUNCT = "();|&\n"
+SUBST = re.compile(r"KGSUB(\d+)")
+VARIABLE = re.compile(r"\$[{A-Za-z_]|KGSUB\d")
+
+
+class Unverifiable(Exception):
+    """列不出目标（ps / pgrep 超时或报错）：宁可拒绝"""
+
+
+# ---------- 把命令拆开 ----------
+
+def strip_heredocs(s):
+    """heredoc 的正文是数据不是命令（提交信息、要写进文件的脚本），整段去掉"""
+    out, pos = [], 0
+    for m in re.finditer(r"(?<!<)<<(?!<)-?\s*(['\"]?)([A-Za-z_][A-Za-z0-9_]*)\1", s):
+        if m.start() < pos:
+            continue
+        eol = s.find("\n", m.end())
+        if eol < 0:
+            break
+        end = re.compile(r"^[ \t]*" + re.escape(m.group(2)) + r"[ \t]*$", re.M).search(s, eol + 1)
+        if not end:
+            break
+        out.append(s[pos:eol + 1])
+        pos = end.end()
+    out.append(s[pos:])
+    return "".join(out)
+
+
+def close_paren(s, i):
+    depth, n = 1, len(s)
+    while i < n:
+        c = s[i]
+        if c == "\\":
+            i += 2
+            continue
+        if c in "'\"":
+            j = s.find(c, i + 1)
+            i = n if j < 0 else j + 1
+            continue
+        if c == "(":
+            depth += 1
+        elif c == ")":
+            depth -= 1
+            if depth == 0:
+                return i
+        i += 1
+    return n
+
+
+def take_substitutions(s):
+    """$(...)、<(...)、`...` 换成占位符 KGSUB<n>，里面的命令另外返回（它们一样会执行）。单引号里的不算。"""
+    out, subs, i, n, dq = [], [], 0, len(s), False
+    while i < n:
+        c = s[i]
+        if c == "\\":
+            out.append(s[i:i + 2])
+            i += 2
+        elif c == "'" and not dq:
+            j = s.find("'", i + 1)
+            j = n - 1 if j < 0 else j
+            out.append(s[i:j + 1])
+            i = j + 1
+        elif c == '"':
+            dq = not dq
+            out.append(c)
+            i += 1
+        elif c in "$<>" and s.startswith("(", i + 1) and not s.startswith("((", i + 1):
+            j = close_paren(s, i + 2)
+            subs.append(s[i + 2:j])
+            out.append(f"KGSUB{len(subs) - 1}" if dq else f" KGSUB{len(subs) - 1} ")
+            i = j + 1
+        elif c == "`":
+            j = s.find("`", i + 1)
+            j = n if j < 0 else j
+            subs.append(s[i + 1:j])
+            out.append(f"KGSUB{len(subs) - 1}" if dq else f" KGSUB{len(subs) - 1} ")
+            i = j + 1
+        else:
+            out.append(c)
+            i += 1
+    return "".join(out), subs
+
+
+def segments(s):
+    """拆成一段段简单命令 [(前面的分隔符, [词...])]。重定向（2>/dev/null、>&2、<<EOF、<<<）和注释先去掉。"""
+    s = s.replace("\\\n", " ")
+    s = re.sub(r"<<<\s*\S+|<<-?\s*(['\"]?)[A-Za-z_]\w*\1", " ", s)
+    s = re.sub(r"(?<![\w$])\d*(?:&>>?|>>?&?|<&?)\s*(?:&?-|&\d+|[^\s;&|()<>]+)", " ", s)
+    lex = shlex.shlex(s, posix=True, punctuation_chars=PUNCT)
+    lex.whitespace = " \t\r"
+    lex.whitespace_split = True
+    lex.commenters = ""
+    segs, cur, sep, comment = [], [], "", False
+    for t in lex:
+        if t and set(t) <= set(PUNCT):
+            if comment and "\n" not in t:
+                continue
+            comment = False
+            if cur:
+                segs.append((sep, cur))
+            cur, sep = [], t
+        elif t.startswith("#") or comment:
+            comment = True
+        else:
+            cur.append(t)
+    if cur:
+        segs.append((sep, cur))
+    return segs
+
+
+def invocations(s, depth=0):
+    """命令里每一条会执行的 pkill / pgrep / killall / kill，带上它周围的信息"""
+    s, subs = take_substitutions(strip_heredocs(s))
+    found = []
+    for sub in subs:
+        if depth < 5:
+            found += invocations(sub, depth + 1)
+    prev, loops = None, {}
+    for sep, words in segments(s):
+        env, w, xargs, sudo = {}, list(words), False, False
+        while w:
+            if re.fullmatch(r"[A-Za-z_]\w*=.*", w[0], re.S):
+                k, _, v = w.pop(0).partition("=")
+                env[k] = v
+                continue
+            name = os.path.basename(w[0])
+            if name not in WRAPPERS:
+                break
+            xargs = xargs or name == "xargs"
+            sudo = sudo or name == "sudo"
+            w.pop(0)
+            while w and (w[0].startswith("-") or (name in ("timeout", "gtimeout") and re.fullmatch(r"[\d.]+[smhd]?", w[0]))):
+                opt = w.pop(0)
+                if opt in WRAPPER_VALUE.get(name, ()) and w:
+                    w.pop(0)
+        if not w:
+            continue
+        name = os.path.basename(w[0])
+        if name == "for" and len(w) >= 3 and w[2] == "in":
+            loops[w[1]] = w[3:]
+        elif name in ("bash", "sh", "zsh") and "-c" in w[1:]:
+            i = w.index("-c")
+            if i + 1 < len(w) and depth < 5:
+                found += invocations(w[i + 1], depth + 1)
+        elif name in ("pkill", "pgrep", "killall", "kill"):
+            found.append({"name": name, "args": w[1:], "env": env, "subs": subs, "loops": dict(loops), "sudo": sudo,
+                          "piped": prev if sep == "|" and xargs else None})
+        prev = (name, w[1:])
+    return found
+
+
+# ---------- 参数 ----------
+
+def is_signal(a):
+    m = re.fullmatch(r"-(?:SIG)?([A-Za-z]+[12]?|\d+)", a, re.I)
+    return bool(m) and (m.group(1).isdigit() or m.group(1).upper() in SIGNALS)
+
+
+def parse_bsd(args, value, signal):
+    """BSD getopt：读到第一个不是选项的参数就停，后面全是 pattern。
+    signal："first" 是 pkill（-9 / -KILL 只能放第一个），"any" 是 killall（-SIGNAL 混在选项里），None 是 pgrep。
+    返回 (信号, 选项, patterns, 有没有 --)"""
+    sig, opts, i = None, [], 0
+    if signal == "first" and args and is_signal(args[0]):
+        sig, i = args[0][1:], 1
+    while i < len(args):
+        a = args[i]
+        if a == "--":
+            return sig, opts, args[i + 1:], True
+        if not a.startswith("-") or a == "-":
+            break
+        if signal == "any" and is_signal(a):
+            sig = a[1:]
+            i += 1
+            continue
+        j = 1
+        while j < len(a):
+            c = a[j]
+            if c in value:
+                v = a[j + 1:]
+                if not v and i + 1 < len(args):
+                    i += 1
+                    v = args[i]
+                opts += ["-" + c, v]
+                break
+            opts.append("-" + c)
+            j += 1
+        i += 1
+    return sig, opts, args[i:], False
+
+
+def misordered(name, opts, rest, dashdash, sig=None):
+    late = [a for a in rest[1:] if a.startswith("-") and a != "-"] if not dashdash else []
+    if not late:
+        return None
+    extra = " ".join(map(shlex.quote, rest[1:]))
+    fixed = " ".join([name] + (["-" + sig] if sig else []) + opts + rest[1:] + [shlex.quote(rest[0])])
+    return (f"`{name}` has {', '.join(late)} after the pattern {shlex.quote(rest[0])}. macOS {name} stops reading "
+            f"options at the first pattern, so `{extra}` would be read as more patterns, each matching on its own "
+            f"(on 2026-10-14 `-P 1` became the pattern \"1\" and SIGTERMed 706 processes). Put the options before the "
+            f"pattern: `{fixed}`.")
+
+
+# ---------- 进程表 ----------
+
+class Procs:
+    def __init__(self):
+        try:
+            out = subprocess.run(["/bin/ps", "-axo", "pid=,ppid=,uid=,command="], capture_output=True, text=True,
+                                 timeout=15).stdout
+        except subprocess.TimeoutExpired:
+            raise Unverifiable("ps timed out after 15 s (the machine may be overloaded); try again in a minute")
+        self.table, self.children = {}, {}
+        for line in out.splitlines():
+            parts = line.split(None, 3)
+            if len(parts) < 4 or not parts[0].isdigit():
+                continue
+            pid, ppid, uid = int(parts[0]), int(parts[1]), int(parts[2])
+            self.table[pid] = (ppid, uid, parts[3])
+            self.children.setdefault(ppid, []).append(pid)
+        self.uid = os.getuid()
+        self.ancestors = self.chain(os.getppid())
+        # 这个会话的 Claude：离 hook 最近的那个
+        self.agent = next((p for p in self.ancestors if AGENT.search(self.cmd(p))), None)
+        self.mine = set()
+        stack = list(self.children.get(self.agent, [])) if self.agent else []
+        while stack:
+            p = stack.pop()
+            if p not in self.mine and p not in self.ancestors:
+                self.mine.add(p)
+                stack += self.children.get(p, [])
+        try:
+            with open(PROTECT_FILE) as f:
+                self.protect = [re.compile(l.strip()) for l in f if l.strip() and not l.startswith("#")]
+        except (OSError, re.error):
+            self.protect = []
+
+    def cmd(self, pid):
+        return self.table.get(pid, (0, 0, ""))[2]
+
+    def chain(self, pid):
+        out = []
+        while pid > 1 and pid in self.table and pid not in out:
+            out.append(pid)
+            pid = self.table[pid][0]
+        return out
+
+    def why(self, pid):
+        """('hard' | 'soft' | None, 说明)"""
+        if pid in self.ancestors:
+            return "hard", "this Claude Code session itself"
+        if pid in self.mine:
+            return None, ""
+        other = next((p for p in self.chain(pid) if p != self.agent and AGENT.search(self.cmd(p))), None)
+        if other:
+            return "hard", f"another Claude Code / Codex session (pid {other})" if other == pid else \
+                f"started by another Claude Code / Codex session (pid {other})"
+        c = self.cmd(pid)
+        if any(r.search(c) for r in self.protect):
+            return "soft", "listed in ~/.config/claude-killguard/protect"
+        for label, r in GROUPS:
+            if r.search(c):
+                return "soft", label
+        return None, ""
+
+
+def pgrep(opts, patterns):
+    keep, skip = [], False
+    for o in opts:  # -l -q -d 只改输出，-I 是 pkill 的逐个确认
+        if skip:
+            keep.append(o)
+            skip = False
+        elif o in ("-l", "-q", "-I"):
+            continue
+        else:
+            keep.append(o)
+            skip = o[1:] in PGREP_VALUE
+    try:
+        r = subprocess.run(["/usr/bin/pgrep"] + keep + ["--"] + patterns, capture_output=True, text=True, timeout=15)
+    except subprocess.TimeoutExpired:
+        raise Unverifiable("pgrep timed out after 15 s; try again in a minute")
+    if r.returncode not in (0, 1):
+        raise Unverifiable(f"pgrep could not run these arguments: {r.stderr.strip()[:200]}")
+    return [int(x) for x in r.stdout.split() if x.isdigit()]
+
+
+def killall_dry(opts, names):
+    keep = [o for o in opts if o not in ("-I", "-s", "-v", "-d")]
+    try:
+        r = subprocess.run(["/usr/bin/killall", "-s"] + keep + names, capture_output=True, text=True, timeout=15)
+    except subprocess.TimeoutExpired:
+        raise Unverifiable("killall -s timed out after 15 s; try again in a minute")
+    return [int(m.group(1)) for m in re.finditer(r"^kill -\S+ (\d+)", r.stdout, re.M)]
+
+
+# ---------- 判断 ----------
+
+def judge(what, cmdname, pids, inv, procs):
+    """pids 是这条命令会发信号的进程；有问题返回说明"""
+    pids = sorted({p for p in pids if p in procs.table and (inv["sudo"] or procs.table[p][1] == procs.uid)})
+    if not pids:
+        return None
+    rows = [(p, *procs.why(p)) for p in pids]
+    hard = [r for r in rows if r[1] == "hard"]
+    soft = [r for r in rows if r[1] == "soft"]
+    if not hard and not soft and len(pids) <= LIMIT:
+        return None
+    if not hard and inv["env"].get("KILLGUARD_OK") == str(len(pids)):
+        return None
+    shown = sorted(rows, key=lambda r: {"hard": 0, "soft": 1}.get(r[1], 2))[:12]
+    def brief(c):  # 长命令行留头尾：解释器路径在前，脚本名在后
+        return c if len(c) <= 110 else c[:55] + " … " + c[-50:]
+    lines = [f"  {p:>6}  {brief(procs.cmd(p))}" + (f"   [{w}]" if w else "") for p, _, w in shown]
+    if len(rows) > len(shown):
+        lines.append(f"  ... and {len(rows) - len(shown)} more")
+    head = f"`{what}` would signal {len(pids)} process{'es' if len(pids) > 1 else ''}:\n" + "\n".join(lines) + "\n"
+    if hard:
+        return head + ("Stopping this session, or another session that is still running, is refused outright. "
+                       "Narrow it to your own processes (`pgrep -lf '<pattern>'` shows what a pattern matches), "
+                       "or ask the user to do it.")
+    why = (f"Protected: {'; '.join(sorted({w for _, _, w in soft}))}. " if soft else "") + \
+          (f"That is more than {LIMIT}. " if len(pids) > LIMIT else "")
+    return head + why + (f"If these are exactly the processes you mean to stop, run it again with "
+                         f"KILLGUARD_OK={len(pids)} in front of {cmdname} (`KILLGUARD_OK={len(pids)} {cmdname} ...`). "
+                         f"Otherwise narrow it (`pgrep -lf '<pattern>'` shows what a pattern matches).")
+
+
+def pgrep_literal(args):
+    """pgrep 的参数 → PID；参数有问题或不是写死的返回 None"""
+    _, opts, rest, dd = parse_bsd(args, PGREP_VALUE, None)
+    if misordered("pgrep", opts, rest, dd) or any(VARIABLE.search(x) for x in rest + opts):
+        return None
+    return pgrep(opts, rest)
+
+
+def check(inv, procs_box):
+    """一条调用的问题，没有就返回 None"""
+    name, args = inv["name"], inv["args"]
+
+    def procs():
+        if not procs_box:
+            procs_box.append(Procs())
+        return procs_box[0]
+
+    def resolve(token):
+        """kill 的一个目标 → PID 列表；hook 里算不出来（$pid 之类）返回 None"""
+        m = SUBST.fullmatch(token)
+        if m and int(m.group(1)) < len(inv["subs"]):
+            sub = invocations(inv["subs"][int(m.group(1))])
+            return pgrep_literal(sub[0]["args"]) if len(sub) == 1 and sub[0]["name"] == "pgrep" else None
+        v = re.fullmatch(r"\$\{?([A-Za-z_]\w*)\}?", token)
+        if v and v.group(1) in inv["loops"]:  # for p in $(pgrep ...); do kill $p
+            got = []
+            for item in inv["loops"][v.group(1)]:
+                r = resolve(item)
+                if r is None:
+                    return None
+                got += r
+            return got
+        return [int(token)] if re.fullmatch(r"\d+", token) else None
+
+    if name == "pgrep":
+        _, opts, rest, dd = parse_bsd(args, PGREP_VALUE, None)
+        return misordered("pgrep", opts, rest, dd) if rest else None
+
+    if name == "pkill":
+        sig, opts, rest, dd = parse_bsd(args, PGREP_VALUE, "first")
+        if sig == "0":
+            return None
+        bad = misordered("pkill", opts, rest, dd, sig) if rest else None
+        if bad:
+            return bad
+        if len(rest) > 1:
+            return (f"`pkill` got {len(rest)} patterns ({', '.join(map(shlex.quote, rest))}); macOS pkill kills "
+                    f"anything that matches any one of them. Quote a pattern that contains spaces, or run one pkill "
+                    f"per pattern.")
+        if any(VARIABLE.search(x) for x in rest + opts):
+            return ("`pkill` with a pattern built from a variable or $(...) can't be checked before it runs. "
+                    "Write the pattern out, or list the targets with `pgrep -lf` and kill their PIDs.")
+        return judge("pkill " + " ".join(map(shlex.quote, args)), "pkill", pgrep(opts, rest), inv, procs())
+
+    if name == "killall":
+        sig, opts, rest, dd = parse_bsd(args, KILLALL_VALUE, "any")
+        if "-l" in opts or "-s" in opts or sig == "0" or not rest:
+            return None
+        bad = misordered("killall", opts, rest, dd, sig)
+        if bad:
+            return bad
+        if any(VARIABLE.search(x) for x in rest + opts):
+            return "`killall` with a name built from a variable or $(...) can't be checked before it runs; write it out."
+        return judge("killall " + " ".join(map(shlex.quote, args)), "killall", killall_dry(opts, rest), inv, procs())
+
+    # kill [-s SIG | -n N | -SIG] [--] 目标...
+    if args and args[0] in ("-l", "-L"):
+        return None
+    if args and args[0] in ("-s", "-n"):
+        sig, i = (args[1] if len(args) > 1 else ""), 2
+    elif args and args[0].startswith("-") and args[0] != "--":
+        sig, i = args[0][1:], 1
+    else:
+        sig, i = "TERM", 0
+    if sig in ("0", "SIG0"):  # 只是看进程在不在
+        return None
+    if i < len(args) and args[i] == "--":
+        i += 1
+    targets = args[i:]
+    for t in targets:
+        if re.fullmatch(r"-?\d+", t) and int(t) <= 1:
+            meaning = ("every process you are allowed to signal" if t == "-1" else
+                       "launchd" if t == "1" else "a whole process group")
+            return f"`kill {' '.join(args)}`: target {t} means {meaning}. Kill specific PIDs instead."
+    subs = inv["subs"]
+    shown = [SUBST.sub(lambda m: f"$({subs[int(m.group(1))].strip()})" if int(m.group(1)) < len(subs) else "$(...)", a)
+             for a in args]
+    what, pids = "kill " + " ".join(shown), []
+    if inv["piped"] and inv["piped"][0] == "pgrep":  # pgrep ... | xargs kill
+        got = pgrep_literal(inv["piped"][1])
+        if got is not None:
+            pids += got
+            what = "pgrep " + " ".join(map(shlex.quote, inv["piped"][1])) + " | xargs " + what
+    for t in targets:
+        r = None if t.startswith("%") else resolve(t)
+        pids += r or []
+    return judge(what, "kill", pids, inv, procs()) if pids else None
+
+
+def decide(cmd):
+    if not TRIGGER.search(cmd):
+        return None
+    try:
+        invs = invocations(cmd)
+    except ValueError:  # 引号不配对之类：shell 自己也会报错
+        return None
+    reasons, box = [], []
+    for inv in invs:
+        try:
+            r = check(inv, box)
+        except Unverifiable as e:
+            r = f"claude-killguard could not list what `{inv['name']}` would hit: {e}."
+        if r and r not in reasons:
+            reasons.append(r)
+    return ("claude-killguard: " + "\n\n".join(reasons)) if reasons else None
+
+
+def log(msg):
+    os.makedirs(DIR, exist_ok=True)
+    with open(LOG, "a") as f:
+        f.write(f"{datetime.now():%m-%d %H:%M} {msg}\n")
+
+
+def main():
+    mode = sys.argv[1] if len(sys.argv) > 1 else "log"
+    if mode == "pre":
+        try:
+            inp = json.load(sys.stdin)
+        except ValueError:
+            return
+        cmd = (inp.get("tool_input") or {}).get("command") or ""
+        try:
+            reason = decide(cmd)
+        except Exception as e:  # 自己的 bug 不挡命令，记下来
+            log(f"error {type(e).__name__}: {e} in {cmd[:160]!r}")
+            return
+        if reason:
+            first = reason.split("\n", 1)[0][18:130]
+            log(f"deny {str(inp.get('session_id', ''))[:8]} {inp.get('cwd', '')}: {cmd[:160]!r} -- {first}")
+            print(json.dumps({"hookSpecificOutput": {"hookEventName": "PreToolUse", "permissionDecision": "deny",
+                                                     "permissionDecisionReason": reason}}))
+    elif mode == "check":
+        reason = decide(" ".join(sys.argv[2:]) if len(sys.argv) > 2 else sys.stdin.read())
+        print(reason or "allow")
+        sys.exit(1 if reason else 0)
+    elif mode == "log":
+        try:
+            with open(LOG) as f:
+                print("".join(f.readlines()[-20:]), end="")
+        except OSError:
+            print("nothing refused yet")
+    else:
+        sys.exit(__doc__)
+
+
+if __name__ == "__main__":
+    main()

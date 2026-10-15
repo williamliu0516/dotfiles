@@ -22,6 +22,7 @@ To update a machine, run the same command again. If something has edited a file 
 | `claude-tmux` | tmux window numbers coloured by Claude Code state; Claude panes reopen their conversation after a restore (needs `terminal`) | ✓ | ✓ |
 | `claude-push` | Phone / iPad push via [ntfy](https://ntfy.sh) whenever Claude stops or waits for approval | ✓ | ✓ |
 | `claude-sims` | At most 3 iOS simulators booted across all Claude Code sessions; shuts them down when their session ends or after 45 min unused | | ✓ |
+| `claude-killguard` | Lists what a `pkill` / `killall` / `kill` would hit before Claude Code runs it; refuses options after the pattern, and kills that reach another session, Docker or the system until Claude has seen the list | | ✓ |
 | `claude-statusline` | Claude Code status line — folder, branch, model, 5h and weekly usage. From [claude-status-bar](https://github.com/williamliu0516/claude-status-bar) | ✓ | ✓ |
 | `keyboard-display` | Claude Code sessions on a keyboard's 142×428 panel. From [context-keyboard-display](https://github.com/williamliu0516/context-keyboard-display); the hotkeys are macOS-only | ✓ | ✓ |
 | `gnome-desktop` | Orchis theme, Tela icons, lighter top bar and dock, auto-hiding top bar, Super+Enter drop-down Ghostty | GNOME | |
@@ -97,6 +98,8 @@ Window numbers are colour-coded by Claude Code state — cyan running, yellow ne
 
 `claude-sims` keeps parallel Claude Code sessions from piling up iOS simulators: each one runs about 150 processes, and five at once froze a 10-core Mac. A PreToolUse hook refuses a command that would boot a fourth simulator (`CLAUDE_SIMS_MAX` changes the limit) unless it names one that is already booted, and tells Claude who owns what. The session whose boot command brought a simulator up owns it; it is shut down when that session ends or when none of its commands has touched a simulator for 45 minutes, and one that no session owns (booted by hand, or before the hook existed) after 4 hours. A launchd job checks every 10 minutes. Simulators are only shut down, never deleted. `claude-sims` lists them; shutdowns are logged in `~/.cache/claude-sims/log`.
 
+`claude-killguard` checks a `pkill`, `killall` or `kill` before a Claude Code session runs it. macOS `pkill` and `pgrep` stop reading options at the first pattern, so `pkill -f "run.sh --one" -P 1` takes `-P` and `1` as two more patterns and signals every process whose command line contains a 1; on 2026-10-14 that took down Docker's VM, another session's builds and twenty-odd system widgets. A PreToolUse hook refuses options after the pattern, more than one `pkill` pattern, `kill -1` / `0`, and patterns built from variables. Otherwise it lists the targets with `pgrep` first (also for `kill $(pgrep …)`, `pgrep … | xargs kill` and `for p in $(pgrep …)` loops). It refuses outright when they include the session itself, or another Claude Code / Codex session that is still running or anything it started. Docker, tmux / ssh / mosh, macOS system processes, simulators, whatever `~/.config/claude-killguard/protect` lists (one regex per line, matched against the command line), and more than 20 targets (`CLAUDE_KILLGUARD_LIMIT`) need `KILLGUARD_OK=<count>` in front of the command, after Claude has seen the list. Processes the session started itself are never protected, and `kill -0` is not checked. `claude-killguard check '<command>'` shows the verdict for a command; refusals are logged in `~/.cache/claude-killguard/log`.
+
 Sessions auto-save every 15 minutes and restore on start (tmux-resurrect + continuum). resurrect brings a Claude Code pane back as a plain shell, so with `claude-tmux` installed each pane also records its Claude session ID, the save carries it, and after a restore `claude --resume <id>` runs in the same pane. A save is at most 15 minutes old, so a session started after the last save doesn't come back.
 
 ### mosh (iPad / flaky links)
@@ -138,6 +141,7 @@ config/
 bin/
   claude-push           Claude Code hook → ntfy push; `claude-push --test` sends one
   claude-sims           Claude Code hooks + launchd job that cap and shut down iOS simulators
+  claude-killguard      Claude Code hook that lists what a pkill / killall / kill would hit and refuses the wrong ones
   theme-preview         preview any Ghostty theme in the terminal, ranked by contrast
   tmux/cheatsheet.sh    the Ctrl+b ? popup
   tmux/claude-state.sh  Claude Code hook → tmux window colour, and the pane's session ID
