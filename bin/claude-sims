@@ -2,13 +2,23 @@
 """claude-sims：别让几个 Claude Code 会话把 iOS 模拟器越开越多（macOS）。
 
   claude-sims          列出开着的模拟器：谁开的、闲了多久
+  claude-sims explain  同上，再说一遍 reap 现在会关哪台、为什么（只看不动：不关机、不写状态）
   claude-sims pre      PreToolUse hook（Bash，同步）：已开着 MAX 台时，拒绝会再开一台的命令
-  claude-sims post     PostToolUse hook（Bash）：会话开出来的模拟器记在它名下；用到就刷新"最后使用"
-  claude-sims end      SessionEnd hook：会话结束，关掉它名下的模拟器
-  claude-sims reap     launchd 每 10 分钟：关掉闲置的模拟器
+  claude-sims post     PostToolUse hook（Bash）：认领新开的模拟器；用到就刷新"最后使用"
+  claude-sims end      SessionEnd hook：Claude Code 进程退出后，关掉确定是它开的模拟器（/clear 不算）
+  claude-sims reap     launchd 每 10 分钟：关掉主人已退出的、闲置的模拟器
 
 一台 iOS 27 模拟器带起一百五十来个进程。2026-10-13 几个会话同时开着 5 台（还有一台是前一天忘了关的），
 load 冲到 1000，ps 在内核里卡了十几分钟。这里只 shutdown，从不 delete：数据都在，下次 boot 接着用。
+
+谁是主人：看活着的进程，不看命令文字。参数里带着这台模拟器 UDID（或它独一无二的名字）的进程
+（xcodebuild -destination id=…、simctl launch …），顺着父进程往上找到的那个 Claude Code 进程就是主人；
+前台 `simctl boot <它>` 这种命令跑完进程就没了，就认"命令里点了它的名、并且它正是在这条命令期间开起来的"
+那个会话。主人按 Claude Code 的 pid 记（/clear 换了 session id，pid 不变，主人不变）。
+2026-10-16 以前按命令文字认：谁的命令里出现过 boot 之类的词，之后开起来的模拟器就都记在谁名下，
+结果别的会话的升级检查记到了 a9 名下，a9 一 /clear 就被关在半路。
+认不准（同时有几个会话的进程在用它、开机 20 分钟内都没认出来）就不记主人：
+不会因为哪个会话结束被关，只按 45 分钟闲置关。主人退出时如果还有别的进程在用它，也不关，改成没主人。
 """
 import fcntl
 import json
@@ -21,24 +31,96 @@ from contextlib import contextmanager
 from datetime import datetime, timezone
 
 MAX = int(os.environ.get("CLAUDE_SIMS_MAX", "3"))
-IDLE_MIN = 45   # 名下会话这么久没跑过碰模拟器的命令，就关
-UNOWNED_H = 4   # 不在任何会话名下（手动、Xcode、装 hook 之前开的）：开机这么久就关
-DIR = os.path.expanduser("~/.cache/claude-sims")
+IDLE_MIN = 45   # 这么久没有进程、命令碰过它，就关
+UNOWNED_H = 4   # 从没有哪个 Claude Code 碰过它（手动、Xcode 开的）：开机这么久就关
+CLAIM_MIN = 20  # 开机这么久之内还能认主人；再晚碰它的多半只是来看一眼
+END_WAIT = 300  # SessionEnd 之后最多等 Claude Code 进程退出这么久
+DIR = os.environ.get("CLAUDE_SIMS_DIR") or os.path.expanduser("~/.cache/claude-sims")
 STATE = os.path.join(DIR, "state.json")
 LOG = os.path.join(DIR, "log")
+DRY = False     # list / explain：只看不动，连日志也不写
 
-# 碰模拟器的命令（算"在用"）；其中可能开出新模拟器的那些
+# 碰模拟器的命令（算"在用"）；其中可能开出新模拟器的那些（只用来决定要不要查上限）
 USE_RE = re.compile(r"simctl|simshot|sim-demo|SIMSHOT_|[Ss]imulator|iphonesimulator|xrsimulator|xcodebuild")
 BOOT_RE = re.compile(
     r"simctl\s+(boot\b|bootstatus\b.*\s-b\b)|simshot(\.sh)?\s+setup|sim-demo|open\s+(-\w+\s+)*-a\s+Simulator"
     r"|xcodebuild\b.*\btest\b.*Simulator|xcodebuild\b.*Simulator.*\btest\b", re.S)
 
 
-def booted(timeout=60):
+def devices(timeout=60):
+    """(开着的模拟器, 只出现一次的名字)。名字重复的（"iPhone 17 Pro"）不能拿来认是哪一台。"""
     # 正赶上一批模拟器开机时，simctl list 自己也要等几十秒
-    out = subprocess.run(["xcrun", "simctl", "list", "devices", "booted", "-j"],
+    out = subprocess.run(["xcrun", "simctl", "list", "devices", "-j"],
                          capture_output=True, text=True, timeout=timeout).stdout
-    return [d for r in json.loads(out)["devices"].values() for d in r if d.get("state") == "Booted"]
+    alld = [d for r in json.loads(out)["devices"].values() for d in r]
+    count = {}
+    for d in alld:
+        count[d["name"]] = count.get(d["name"], 0) + 1
+    unique = {n for n, c in count.items() if c == 1 and len(n) >= 6}
+    return [d for d in alld if d.get("state") == "Booted"], unique
+
+
+def procs(timeout=20):
+    """pid → (ppid, 启动时间, 命令行)。ps 卡住（2026-10-13 那种负载）就返回 None，调用方什么都不关。"""
+    try:
+        out = subprocess.run(["ps", "-axww", "-o", "pid=,ppid=,lstart=,command="],
+                             capture_output=True, text=True, timeout=timeout).stdout
+    except (subprocess.TimeoutExpired, OSError):
+        return None
+    P = {}
+    for line in out.splitlines():
+        f = line.split(None, 7)  # lstart 是 5 段："Fri Oct 16 17:20:58 2026"
+        if len(f) == 8:
+            P[int(f[0])] = (int(f[1]), " ".join(f[2:7]), f[7])
+    return P or None
+
+
+def is_claude(cmd):
+    # 真正的 claude，和套在它外面的 claude-img/claude；从下往上找，先碰到的是真的那个
+    return os.path.basename(cmd.split(" ", 1)[0]) == "claude"
+
+
+def claude_of(pid, P):
+    """pid 往上第一个 Claude Code 进程：(pid, 启动时间)；不在任何 Claude Code 底下（被 launchd 收养了）就 None。"""
+    for _ in range(64):
+        if pid not in P or pid <= 1:
+            return None
+        ppid, start, cmd = P[pid]
+        if is_claude(cmd):
+            return [pid, start]
+        pid = ppid
+    return None
+
+
+def my_claude(P):
+    """跑这个 hook 的 Claude Code 进程。"""
+    if not P:
+        return None
+    env = os.environ.get("CLAUDE_PID", "")
+    if env.isdigit() and int(env) in P and is_claude(P[int(env)][2]):
+        return [int(env), P[int(env)][1]]
+    return claude_of(os.getppid(), P)
+
+
+def names_it(text, d, unique):
+    return d["udid"] in text or (d["name"] in unique and d["name"] in text)
+
+
+def users(d, P, unique):
+    """正在用这台模拟器的进程：(它们的 Claude Code 进程集合, 有没有这样的进程)。"""
+    me = os.getpid()
+    claudes, seen = set(), False
+    for pid, (_, _, cmd) in P.items():
+        if pid != me and not is_claude(cmd) and names_it(cmd, d, unique):
+            seen = True
+            c = claude_of(pid, P)
+            if c:
+                claudes.add(tuple(c))
+    return claudes, seen
+
+
+def alive(e, P):
+    return e.get("pid") in P and P[e["pid"]][1] == e.get("start") and is_claude(P[e["pid"]][2])
 
 
 def boot_time(d):
@@ -50,7 +132,7 @@ def boot_time(d):
 
 
 @contextmanager
-def state():
+def state(write=True):
     os.makedirs(DIR, exist_ok=True)
     with open(STATE + ".lock", "w") as lock:
         fcntl.flock(lock, fcntl.LOCK_EX)
@@ -59,20 +141,32 @@ def state():
                 st = json.load(f)
         except (OSError, ValueError):
             st = {}
-        st.setdefault("owners", {})   # udid → {session, cwd, boot, used}
-        st.setdefault("booting", {})  # session → 最近一次跑开机命令的时间
+        st.setdefault("owners", {})  # udid → {pid, start, boot, used, touched}；pid 为 None 是没主人
+        st.setdefault("calls", {})   # tool_use_id → 这条碰模拟器的 Bash 命令开始的时间
+        st.setdefault("pids", {})    # Claude Code pid → {session, cwd}，只给人看
+        st.pop("booting", None)      # 2026-10-16 以前的：哪个 session 说过 boot
         yield st
-        with open(STATE + ".tmp", "w") as f:
-            json.dump(st, f, indent=1)
-        os.replace(STATE + ".tmp", STATE)
+        if write:
+            with open(STATE + ".tmp", "w") as f:
+                json.dump(st, f, indent=1)
+            os.replace(STATE + ".tmp", STATE)
 
 
 def owner(st, d):
     e = st["owners"].get(d["udid"])
-    return e if e and e.get("boot") == d.get("lastUsedAt") else None
+    if not e or e.get("boot") != d.get("lastUsedAt"):
+        return None
+    if "session" in e and "pid" not in e:
+        # 2026-10-16 以前按命令文字认的主人，不可信：当作没主人，只按闲置关
+        e.update(pid=None, start=None, touched=True)
+        e.pop("session")
+        e.pop("cwd", None)
+    return e
 
 
 def log(msg):
+    if DRY:
+        return
     os.makedirs(DIR, exist_ok=True)
     with open(LOG, "a") as f:
         f.write(f"{datetime.now():%m-%d %H:%M} {msg}\n")
@@ -88,99 +182,165 @@ def ago(t, now):
     return f"{m} min" if m < 120 else f"{m // 60} h"
 
 
-def reap(sims, now):
-    """关掉闲置的，返回还开着的。"""
-    keep, drop = [], []
-    with state() as st:
-        for d in sims:
-            e, bt = owner(st, d), boot_time(d)
-            if e and now - e["used"] > IDLE_MIN * 60:
-                drop.append((d, f"session {e['session'][:8]} idle {ago(e['used'], now)}"))
-            elif not e and bt and now - bt > UNOWNED_H * 3600:
-                drop.append((d, f"no owner, booted {ago(bt, now)} ago"))
+def who(st, pid):
+    p = st["pids"].get(str(pid)) or {}
+    s = f"Claude pid {pid}"
+    if p.get("session"):
+        s += f" (session {p['session'][:8]}"
+        s += f" in {p['cwd']})" if p.get("cwd") else ")"
+    return s
+
+
+def survey(st, sims, P, unique, now, hint=None):
+    """看一遍开着的模拟器：认主人、刷新"最后使用"。hint 是刚跑完的那条 Bash 命令：
+    {claude: [pid, start], cmd, since}（since = 这条命令开始的时间，pre 记的）。"""
+    for d in sims:
+        e, bt = owner(st, d), boot_time(d)
+        claudes, seen = users(d, P, unique)
+        named = bool(hint) and names_it(hint["cmd"], d, unique)
+        if e is None:
+            e = st["owners"][d["udid"]] = {"pid": None, "start": None, "boot": d.get("lastUsedAt"),
+                                          "used": bt or now, "touched": False}
+        mine = bool(hint) and hint["claude"] and e["pid"] == hint["claude"][0]
+        if seen or named or (mine and USE_RE.search(hint["cmd"])):
+            e["used"], e["touched"] = now, True
+        if len(claudes) > 1:
+            e["contested"] = True  # 几个会话都在用：认不准，以后也不再认
+        if e["pid"] is None and not e.get("contested") and bt and now - bt < CLAIM_MIN * 60:
+            claim = None
+            if len(claudes) == 1:
+                claim = list(next(iter(claudes)))  # 只有一个会话的进程在用它
+            elif not claudes and named and hint["claude"] and hint.get("since") and bt >= hint["since"] - 5:
+                claim = hint["claude"]  # 前台点名开机，命令已经跑完了
+            if claim:
+                e["pid"], e["start"] = claim
+                log(f"owner {d['name']} {d['udid'][:8]} -> {who(st, claim[0])}")
+        d["_seen"] = seen
+
+
+def reap(st, sims, P, now):
+    """该关的：[(模拟器, 原因)]。主人还在用的、认不准的（只按闲置）留着。P 为 None（ps 卡住）什么都不关。"""
+    drop = []
+    if P is None:
+        return drop
+    for d in sims:
+        e, bt = owner(st, d), boot_time(d)
+        if e and e["pid"] is not None and not alive(e, P):
+            if d.get("_seen"):
+                log(f"owner {who(st, e['pid'])} of {d['name']} {d['udid'][:8]} exited, still in use: no owner now")
+                e.update(pid=None, start=None, used=now, touched=True)
             else:
-                keep.append(d)
-        alive = {d["udid"] for d in keep}
-        st["owners"] = {u: e for u, e in st["owners"].items() if u in alive}
-        st["booting"] = {s: t for s, t in st["booting"].items() if now - t < 86400}
-    for d, why in drop:
-        shutdown(d, why)
-    return keep
+                drop.append((d, f"{who(st, e['pid'])} exited"))
+                continue
+        if e and e["touched"] and now - e["used"] > IDLE_MIN * 60:
+            drop.append((d, f"{who(st, e['pid']) if e['pid'] else 'no owner'}, idle {ago(e['used'], now)}"))
+        elif e and not e["touched"] and bt and now - bt > UNOWNED_H * 3600:
+            drop.append((d, f"no owner, booted {ago(bt, now)} ago"))
+    return drop
 
 
-def describe(sims, now):
-    with state() as st:
-        rows = []
-        for d in sims:
-            e = owner(st, d)
-            who = (f"session {e['session'][:8]} in {e.get('cwd', '?')}, last used {ago(e['used'], now)} ago" if e
-                   else f"no owner, booted {ago(boot_time(d) or now, now)} ago")
-            rows.append(f"  - {d['name']} ({d['udid']}): {who}")
+def prune(st, sims, now):
+    on = {d["udid"] for d in sims}
+    st["owners"] = {u: e for u, e in st["owners"].items() if u in on}
+    st["calls"] = {k: t for k, t in st["calls"].items() if now - t < 6 * 3600}
+    live = {str(e["pid"]) for e in st["owners"].values() if e.get("pid")}
+    st["pids"] = {p: v for p, v in st["pids"].items() if p in live or now - v.get("at", 0) < 86400}
+
+
+def check(now, hint=None, write=True, timeout=60):
+    """看一遍、该关的关掉，返回 (还开着的, 要关的, 状态)。write=False 只看不动。"""
+    sims, unique = devices(timeout)
+    P = procs()
+    if hint:
+        hint["claude"] = my_claude(P)
+    with state(write) as st:
+        if hint and hint["claude"]:
+            st["pids"][str(hint["claude"][0])] = {k: v for k, v in hint.items() if k in ("session", "cwd")}
+            st["pids"][str(hint["claude"][0])]["at"] = now
+        if P:
+            survey(st, sims, P, unique, now, hint)
+        drop = reap(st, sims, P, now)
+        gone = {d["udid"] for d, _ in drop}
+        keep = [d for d in sims if d["udid"] not in gone]
+        prune(st, keep, now)
+        snap = json.loads(json.dumps(st))
+    if write:
+        for d, why in drop:
+            shutdown(d, why)
+    return keep, drop, snap
+
+
+def describe(sims, st, now):
+    rows = []
+    for d in sims:
+        e = st["owners"].get(d["udid"])
+        if e and e.get("pid"):
+            w = f"{who(st, e['pid'])}, last used {ago(e['used'], now)} ago"
+        elif e and e.get("touched"):
+            w = f"owner unsure (shut down only when idle {IDLE_MIN} min), last used {ago(e['used'], now)} ago"
+        else:
+            w = f"no owner, booted {ago(boot_time(d) or now, now)} ago"
+        rows.append(f"  - {d['name']} ({d['udid']}): {w}")
     return "\n".join(rows)
 
 
 def pre(inp, now):
     cmd = inp.get("tool_input", {}).get("command", "")
+    if USE_RE.search(cmd) and inp.get("tool_use_id"):
+        with state() as st:
+            st["calls"][inp["tool_use_id"]] = now
     if not BOOT_RE.search(cmd):
         return
     try:
-        sims = reap(booted(20), now)
+        sims, _, st = check(now, timeout=20)
     except Exception:
         return  # 自己出了错不挡别人的路
     reuse = any(d["udid"] in cmd or d["name"] in cmd for d in sims)
     if len(sims) >= MAX and not reuse:
         reason = (f"claude-sims: {len(sims)} simulators are already booted on this Mac (limit {MAX}; each iOS "
                   f"simulator runs ~150 processes, and 5 at once froze the machine on 2026-10-13):\n"
-                  f"{describe(sims, now)}\n"
+                  f"{describe(sims, st, now)}\n"
                   "Reuse one of yours (put its name or UDID in the command, e.g. SIMSHOT_NAME=\"...\"), shut down "
                   "one of yours you are done with (xcrun simctl shutdown <udid>), or wait. Never shut down another "
                   f"session's simulator. Simulators unused for {IDLE_MIN} min are shut down automatically.")
         print(json.dumps({"hookSpecificOutput": {"hookEventName": "PreToolUse", "permissionDecision": "deny",
                                                  "permissionDecisionReason": reason}}))
-        return
-    if inp.get("session_id"):
-        with state() as st:
-            st["booting"][inp["session_id"]] = now
 
 
 def post(inp, now):
     cmd = inp.get("tool_input", {}).get("command", "")
-    sid = inp.get("session_id")
-    if not sid or not USE_RE.search(cmd):
+    if not USE_RE.search(cmd):
         return
-    sims = booted()
     with state() as st:
-        since = st["booting"].get(sid)
-        for d in sims:
-            e, bt = owner(st, d), boot_time(d)
-            if e:
-                if e["session"] == sid or d["udid"] in cmd or d["name"] in cmd:
-                    e["used"] = now
-            elif since and bt and bt >= since - 5:
-                # 这个会话跑过开机命令之后才开起来的：算它的（后台跑的 setup 也在下一条命令时认领）
-                st["owners"][d["udid"]] = {"session": sid, "cwd": inp.get("cwd", ""),
-                                           "boot": d.get("lastUsedAt"), "used": now}
+        since = st["calls"].pop(inp.get("tool_use_id", ""), None)
+    check(now, {"cmd": cmd, "since": since, "session": inp.get("session_id", ""), "cwd": inp.get("cwd", "")})
 
 
 def end(inp, now):
-    # SessionEnd 时 Claude 正在退出：要关的话交给脱离出来的子进程，hook 马上返回
-    sid = inp.get("session_id")
+    # /clear 也发 SessionEnd，可 Claude Code 进程还在、模拟器还是它的：不管
+    if inp.get("reason") == "clear":
+        return
+    me = my_claude(procs())
+    if not me:
+        return
     with state() as st:
-        mine = any(e["session"] == sid for e in st["owners"].values())
+        mine = any(e.get("pid") == me[0] for e in st["owners"].values())
     if mine:
-        subprocess.Popen([sys.executable, os.path.abspath(__file__), "end-session", sid], start_new_session=True,
+        # Claude 正在退出：交给脱离出来的子进程等它真退出了再收拾，hook 马上返回
+        subprocess.Popen([sys.executable, os.path.abspath(__file__), "end-pid", str(me[0]), me[1]],
+                         start_new_session=True,
                          stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
 
-def end_session(sid):
-    sims = booted()
-    with state() as st:
-        gone = [d for d in sims if (owner(st, d) or {}).get("session") == sid]
-        for d in gone:
-            st["owners"].pop(d["udid"], None)
-        st["booting"].pop(sid, None)
-    for d in gone:
-        shutdown(d, f"session {sid[:8]} ended")
+def end_pid(pid, start):
+    deadline = time.time() + END_WAIT
+    while time.time() < deadline:
+        P = procs()
+        if P is not None and not alive({"pid": pid, "start": start}, P):
+            check(time.time())
+            return
+        time.sleep(2)
+    # 还活着（/resume 换了会话之类）：不关，主人退出时 reap 会收拾
 
 
 def main():
@@ -198,15 +358,20 @@ def run(cmd, now):
         except ValueError:
             return
         {"pre": pre, "post": post, "end": end}[cmd](inp, now)
-    elif cmd == "end-session":
-        end_session(sys.argv[2])
+    elif cmd == "end-pid":
+        end_pid(int(sys.argv[2]), " ".join(sys.argv[3:]))
     elif cmd == "reap":
-        reap(booted(), now)
-    elif cmd == "list":
-        sims = booted()
+        check(now)
+    elif cmd in ("list", "explain"):
+        global DRY
+        DRY = True
+        sims, drop, st = check(now, write=False)
+        sims += [d for d, _ in drop]
         print(f"{len(sims)} booted (limit {MAX})")
         if sims:
-            print(describe(sims, now))
+            print(describe(sims, st, now))
+        if cmd == "explain":
+            print("reap would shut down: " + ("; ".join(f"{d['name']} ({why})" for d, why in drop) or "none"))
     else:
         sys.exit(__doc__)
 
