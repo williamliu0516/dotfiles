@@ -7,6 +7,10 @@
   claude-sims post     PostToolUse hook（Bash）：认领新开的模拟器；用到就刷新"最后使用"
   claude-sims end      SessionEnd hook：Claude Code 进程退出后，关掉确定是它开的模拟器（/clear 不算）
   claude-sims reap     launchd 每 10 分钟：关掉主人已退出的、闲置的模拟器
+  claude-sims slot <UDID|名字> [--wait 秒]
+                       脚本开机之前调：这台已经开着、或还没到 MAX 台，就占一个位子、退出 0；
+                       满了就等（--wait，默认不等），等不到退出 1。hook 只看得见外层命令，
+                       脚本里的 simctl boot 它管不着（2026-10-16 两个 shot 脚本把 3 台开到了 6 台）
 
 一台 iOS 27 模拟器带起一百五十来个进程。2026-10-13 几个会话同时开着 5 台（还有一台是前一天忘了关的），
 load 冲到 1000，ps 在内核里卡了十几分钟。这里只 shutdown，从不 delete：数据都在，下次 boot 接着用。
@@ -33,6 +37,7 @@ from datetime import datetime, timezone
 MAX = int(os.environ.get("CLAUDE_SIMS_MAX", "3"))
 IDLE_MIN = 45   # 这么久没有进程、命令碰过它，就关
 UNOWNED_H = 4   # 从没有哪个 Claude Code 碰过它（手动、Xcode 开的）：开机这么久就关
+SLOT_S = 180    # slot 给出去的位子，这么久还没开起来就收回
 CLAIM_MIN = 20  # 开机这么久之内还能认主人；再晚碰它的多半只是来看一眼
 END_WAIT = 300  # SessionEnd 之后最多等 Claude Code 进程退出这么久
 DIR = os.environ.get("CLAUDE_SIMS_DIR") or os.path.expanduser("~/.cache/claude-sims")
@@ -144,6 +149,7 @@ def state(write=True):
         st.setdefault("owners", {})  # udid → {pid, start, boot, used, touched}；pid 为 None 是没主人
         st.setdefault("calls", {})   # tool_use_id → 这条碰模拟器的 Bash 命令开始的时间
         st.setdefault("pids", {})    # Claude Code pid → {session, cwd}，只给人看
+        st.setdefault("slots", {})   # slot 给出去、还没开起来的：UDID 或名字 → 时间
         st.pop("booting", None)      # 2026-10-16 以前的：哪个 session 说过 boot
         yield st
         if write:
@@ -270,6 +276,36 @@ def check(now, hint=None, write=True, timeout=60):
     return keep, drop, snap
 
 
+def slot(target, wait):
+    """给 target 一个开机位子：True 拿到了。target 已经开着也算拿到。"""
+    deadline, said = time.time() + wait, 0
+    while True:
+        now = time.time()
+        try:
+            sims, _, st = check(now, timeout=30)
+        except Exception as e:  # simctl 都卡住了，更不能再开
+            sims, why = None, f"simctl failed ({type(e).__name__})"
+        if sims is not None:
+            if any(target in (d["udid"], d["name"]) for d in sims):
+                return True
+            on = {d["udid"] for d in sims} | {d["name"] for d in sims}
+            with state() as st2:
+                st2["slots"] = {k: t for k, t in st2["slots"].items() if now - t < SLOT_S and k not in on}
+                coming = len([k for k in st2["slots"] if k != target])
+                if len(sims) + coming < MAX:
+                    st2["slots"][target] = now
+                    return True
+            why = f"{len(sims)} booted + {coming} about to boot, limit {MAX}:\n{describe(sims, st, now)}"
+        if now >= deadline:
+            print(f"claude-sims: no simulator slot for {target}: {why}", file=sys.stderr)
+            return False
+        if now - said >= 300:
+            print(f"claude-sims: waiting for a simulator slot for {target} (up to {ago(now, deadline)} more): {why}",
+                  file=sys.stderr)
+            said = now
+        time.sleep(10)
+
+
 def describe(sims, st, now):
     rows = []
     for d in sims:
@@ -360,6 +396,16 @@ def run(cmd, now):
         {"pre": pre, "post": post, "end": end}[cmd](inp, now)
     elif cmd == "end-pid":
         end_pid(int(sys.argv[2]), " ".join(sys.argv[3:]))
+    elif cmd == "slot":
+        a = sys.argv[2:]
+        wait = 0
+        if "--wait" in a:
+            i = a.index("--wait")
+            wait = int(a[i + 1])
+            del a[i:i + 2]
+        if len(a) != 1:
+            sys.exit(__doc__)
+        sys.exit(0 if slot(a[0], wait) else 1)
     elif cmd == "reap":
         check(now)
     elif cmd in ("list", "explain"):

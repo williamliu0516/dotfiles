@@ -190,6 +190,29 @@ class T(unittest.TestCase):
         self.assertFalse(os.path.exists(cs.STATE))
         self.assertFalse(os.path.exists(cs.LOG))
 
+    def test_slot(self):
+        cs.MAX = 3
+        self.sims = [sim("U-1", "one"), sim("U-2", "two")]
+        self.assertTrue(cs.slot("three", 0))          # 2 台开着：给
+        self.assertFalse(cs.slot("four", 0))          # 2 台 + 1 个要开的：满了
+        self.assertTrue(cs.slot("three", 0))          # 同一个再要一次：还是它的
+        self.assertTrue(cs.slot("U-1", 0))            # 已经开着的：不占位子
+        self.sims.append(sim("U-3", "three"))         # three 开起来了，位子换成真的
+        self.assertFalse(cs.slot("four", 0))
+        with cs.state() as st:
+            self.assertEqual(st["slots"], {})
+        self.sims.pop()                               # three 关了
+        self.assertTrue(cs.slot("four", 0))
+        with cs.state() as st:
+            st["slots"]["four"] -= cs.SLOT_S + 1      # 给了位子一直没开：收回
+        self.assertTrue(cs.slot("five", 0))
+
+    def test_slot_simctl_stuck(self):
+        def stuck(timeout=60):
+            raise cs.subprocess.TimeoutExpired("xcrun", timeout)
+        cs.devices = stuck
+        self.assertFalse(cs.slot("one", 0))
+
     def test_real_claude_not_wrapper(self):
         P = dict(BASE)
         self.assertEqual(cs.claude_of(101, P), [100, "A"])
