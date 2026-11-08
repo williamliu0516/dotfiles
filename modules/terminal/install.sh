@@ -14,7 +14,7 @@ if [ "$OS" = macos ]; then
   # poppler 提供 pdftoppm，yazi 靠它渲染 PDF 预览
   # fd + ripgrep 给 fzf 用：列文件比 find 快得多，且自动跳过 .gitignore 里的东西
   # yazi 不在这里，两个系统都下预编译版，见下面的 1d
-  pkg_install tmux mosh fzf eza bat zoxide poppler btop fd ripgrep
+  pkg_install tmux mosh fzf eza bat zoxide poppler btop fd ripgrep ffmpeg
   # 已经装过的 tmux 上面不会动。3.7c 窗格标题栏有个让 server 卡死的 bug（见 tmux.conf"窗格边框与标题栏"），老于 3.8 就升级
   if have tmux && tmux -V | awk '{ split($2, v, "."); exit !(v[1] + 0 < 3 || (v[1] == 3 && v[2] + 0 < 8)) }'; then
     run_step "brew upgrade tmux" brew upgrade tmux && ok "tmux 升到了 $(tmux -V | awk '{print $2}')" \
@@ -181,14 +181,15 @@ link "$DOTFILES/config/ghostty/shaders"           "$HOME/.config/ghostty/shaders
 # macOS：macos.ghostty 铺的预模糊壁纸图；Linux 用实时模糊，不链接
 if [ "$OS" = macos ]; then
   link "$DOTFILES/config/ghostty/backgrounds"     "$HOME/.config/ghostty/backgrounds"
-  if [ ! -f "$DOTFILES/config/ghostty/backgrounds/wallpaper.png" ]; then
-    if have ffmpeg; then
-      info "生成 Ghostty 背景图（抓当前壁纸并模糊）"
-      "$DOTFILES/config/ghostty/backgrounds/make.sh" >/dev/null && ok "backgrounds/wallpaper.png" \
-        || warn "背景图生成失败（终端需要「屏幕录制」权限）。手动：config/ghostty/backgrounds/make.sh"
+  # 每分钟检查一次壁纸是否变了；没有变化时不重新处理图片。
+  if have ffmpeg; then
+    if "$DOTFILES/config/ghostty/backgrounds/install-sync.sh"; then
+      ok "Ghostty 壁纸自动同步"
     else
-      warn "没有 ffmpeg，跳过 Ghostty 背景图。brew install ffmpeg 后跑 config/ghostty/backgrounds/make.sh"
+      warn "Ghostty 壁纸自动同步安装失败：config/ghostty/backgrounds/install-sync.sh"
     fi
+  else
+    warn "没有 ffmpeg，跳过 Ghostty 壁纸自动同步。brew install ffmpeg 后跑 config/ghostty/backgrounds/install-sync.sh"
   fi
 fi
 link "$DOTFILES/config/yazi/yazi.toml"            "$HOME/.config/yazi/yazi.toml"

@@ -6,15 +6,19 @@ macos-titlebar-style = hidden
 # 让 Option 当 Alt 用：tmux 的 Alt+m 菜单、Alt+h/j/k/l 切窗格都靠它
 macos-option-as-alt = true
 
+# 新窗口和全屏快捷键使用非原生全屏，覆盖刘海两侧；窗口留在当前 Space，刘海可能遮挡内容，原生标签页不可用。
+fullscreen = non-native
+macos-non-native-fullscreen = true
+# 给顶部摄像头和状态栏下方的内容留出空间。
+window-padding-y = 20,8
+
 # ===== 毛玻璃：静态壁纸图代替实时模糊 =====
-# 原生全屏（Cmd+Enter / Ctrl+Cmd+F）会把窗口搬进新 Space，背后是黑的，实时 background-blur 透不出壁纸。
-# 之前用 macos-non-native-fullscreen 绕开，代价是不是系统全屏（没有独立 Space、手势切不过去）。
-# 现在改成：窗口不透明，背景铺一张预先模糊好的当前壁纸截图（backgrounds/make.sh 生成，不进 git）。
-# 全屏和窗口模式看起来一致，也省掉实时模糊的合成开销；代价是窗口模式下不再透出真实的桌面，换壁纸要重跑脚本。
+# 窗口不透明，背景铺一张预先模糊好的当前壁纸截图（backgrounds/make.sh 生成，不进 git）。
+# 全屏和窗口模式看起来一致，也省掉实时模糊的合成开销；换壁纸要重跑脚本。
 background-opacity = 1
 background-image = backgrounds/wallpaper.png
-# 图和主题背景色按 0.25 : 0.75 混合，正好等于原来 background-opacity = 0.75 透出模糊桌面的配比；想更"透"就调大。
-background-image-opacity = 0.25
+# 图和主题背景色按 0.45 : 0.55 混合，让壁纸更清楚，同时保留文字可读性。
+background-image-opacity = 0.45
 background-image-fit = cover
 background-image-position = center
 # Ctrl+Enter 在 macOS 上默认没绑定，补上，和 Linux 同一个键；Cmd+Enter 仍然可用

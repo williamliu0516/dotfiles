@@ -63,7 +63,9 @@ On GNOME, `Ctrl+Enter` maximizes rather than going fullscreen: GNOME stops compo
 
 On macOS, Option works as Alt, so the tmux keys below are the same on both. Ghostty's own Option+←/→ (word movement) is unbound so tmux gets them for window switching, as on Linux; outside tmux they still move by word. `Ctrl+←/→` is taken by Mission Control on macOS — turn off "Move left/right a space" in System Settings › Keyboard › Keyboard Shortcuts › Mission Control if you want it back in the shell.
 
-On macOS, `Ctrl+Enter` (or `Cmd+Enter`) uses non-native fullscreen: the window fills the screen on the current Space instead of moving to a new one, so the blur of what's behind it survives. Native fullscreen would put it on an empty Space with nothing to blur. Native macOS tabs don't work in this mode; use tmux windows.
+On macOS, new Ghostty windows start in non-native fullscreen, and `Ctrl+Enter` (or `Cmd+Enter`) toggles it. This fills the display around the camera notch while staying on the current Space; the notch may cover terminal content. To keep Ghostty on a dedicated desktop, create one in Mission Control, move Ghostty there, and use the Dock icon's Options → Assign To → This Desktop. Other apps can still open there unless assigned elsewhere. Native macOS tabs don't work in this mode; use tmux windows. The background is a pre-blurred wallpaper image. A macOS user agent checks for wallpaper changes every minute, regenerates the image when needed, and reloads Ghostty. Apple aerials use a still frame rather than live animation. Run `config/ghostty/backgrounds/make.sh` to refresh it immediately; `ffmpeg` is required.
+
+On the MacBook Pro with model identifier `Mac17,12`, wide Ghostty clients show tmux windows in a stable order around a gap reserved for the camera area; other Mac models use the regular layout. The gap adapts to the client's character width, reserving 102 pixels plus two character columns for the camera area; adjust `@notch-pixels` for another Mac. Switching windows moves the highlight without rearranging the list. The layout uses a smaller width budget when all window names are short; when the list exceeds the available space, `‹` and `›` indicate other pages, and long names are truncated. Other terminal clients and narrow Ghostty windows use the regular layout. tmux cannot detect which display a client is on, so wide Ghostty windows on external displays get the gap too.
 
 ### tmux
 
@@ -109,7 +111,7 @@ Sessions auto-save every 15 minutes and restore on start (tmux-resurrect + conti
 
 `mosh` is installed with the terminal module, so Blink Shell, Termius or Moshi on an iPad can connect over mosh and survive sleeping the iPad or changing networks. Two things make that work out of the box: `config/zsh/zshenv` is sourced by every zsh, including the non-interactive one sshd starts for `mosh-server new`, so Homebrew is on the PATH and a UTF-8 `LANG` is set even when the client sends none. Nothing else to configure: mosh uses UDP 60000–61000 on the server, which a Tailscale link passes as-is. Pair it with a startup command of `tmux new -As main` in the client and you land in the same session every time.
 
-The status bar starts with the Claude Code account this tmux is billing (`personal`, or the organization's name; from [claude-status-bar](https://github.com/williamliu0516/claude-status-bar)'s `--account`, so Claude panes don't repeat it), then CPU, memory in use and GPU load (amber above 70%, red above 90%; the GPU segment appears where it can be read — Apple Silicon, NVIDIA, AMD), then battery level with time to empty, or time to full while charging (`/sys` and upower on Linux, `pmset` on macOS). On a desktop with no battery the segment disappears entirely.
+The status bar shows CPU, memory in use and GPU load (amber above 70%, red above 90%; the GPU segment appears where it can be read — Apple Silicon, NVIDIA, AMD), then battery level with time to empty, or time to full while charging (`/sys` and upower on Linux, `pmset` on macOS). On a desktop with no battery the segment disappears entirely.
 
 ### GNOME desktop
 
@@ -154,6 +156,7 @@ bin/
   tmux/claude-resume.sh resurrect hooks: save each pane's Claude session, resume it after a restore
   tmux/save-pane.sh     dump the current pane's scrollback to a file
   tmux/battery.sh       battery segment for the status bar
+  tmux/notch-width.sh   choose the MacBook status bar label width per session
   tmux/claude-account.sh  the Claude Code account this tmux uses, for the status bar
 index.html           the page at xiaweiliu.com/dotfiles
 ```

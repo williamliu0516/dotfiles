@@ -3,7 +3,7 @@ theme = dark:snappy,light:snappy_light
 
 # ===== 字体 =====
 font-family = Maple Mono NF CN
-font-size = 12
+font-size = 16
 font-thicken = true
 font-feature = +cv01
 font-feature = +cv02
