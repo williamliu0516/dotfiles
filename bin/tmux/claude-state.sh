@@ -30,7 +30,11 @@ case "$event" in
   *) exit 0 ;;
 esac
 
-tmux set-option -w -t "$TMUX_PANE" @agent-state "$state" 2>/dev/null || true
+# 窗口上的给顶栏窗口号染色；窗格上的（带时间）给 agents.sh 的 Alt+a / Alt+g：
+# 一个窗口里开着几个 Claude 时也分得清，"最近跑完的"也有个准时间（window_activity 被每秒刷新的状态栏顶着，不能用）
+tmux set-option -w -t "$TMUX_PANE" @agent-state "$state" \; \
+     set-option -p -t "$TMUX_PANE" @agent-pane-state "$state" \; \
+     set-option -p -t "$TMUX_PANE" @agent-pane-at "$(date +%s)" 2>/dev/null || true
 
 # 窗格记下跑的是哪个会话，tmux 存档时一起存，重启后 claude-resume.sh 用它接回原对话。
 # 每个事件都记：/clear、/resume 换了会话也跟得上，这个 hook 生效前就开着的会话下个事件也会记上
