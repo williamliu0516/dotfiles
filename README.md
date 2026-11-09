@@ -24,7 +24,7 @@ To update a machine, run the same command again. If something has edited a file 
 | `claude-img` | Images Claude reads or screenshots appear right in the transcript, as in the mobile app, also inside tmux; needs Ghostty or kitty (needs `terminal`) | ✓ | ✓ |
 | `claude-sims` | At most 3 iOS simulators booted across all Claude Code sessions; shuts them down when their session ends or after 45 min unused | | ✓ |
 | `claude-killguard` | Lists what a `pkill` / `killall` / `kill` would hit before Claude Code runs it; refuses options after the pattern, and kills that reach another session, Docker or the system until Claude has seen the list | | ✓ |
-| `claude-statusline` | Claude Code status line — folder, branch, model, 5h and weekly usage. From [claude-status-bar](https://github.com/williamliu0516/claude-status-bar) | ✓ | ✓ |
+| `claude-statusline` | Claude Code status line — adapts to pane width, with actual model/account and numeric 5h/weekly usage; supports Magpie routing. From [claude-status-bar](https://github.com/williamliu0516/claude-status-bar) | ✓ | ✓ |
 | `keyboard-display` | Claude Code sessions on a keyboard's 142×428 panel. From [context-keyboard-display](https://github.com/williamliu0516/context-keyboard-display); the hotkeys are macOS-only | ✓ | ✓ |
 | `gnome-desktop` | Orchis theme, Tela icons, lighter top bar and dock, auto-hiding top bar, Super+Enter drop-down Ghostty | GNOME | |
 
@@ -157,7 +157,7 @@ bin/
   tmux/save-pane.sh     dump the current pane's scrollback to a file
   tmux/battery.sh       battery segment for the status bar
   tmux/notch-width.sh   choose the MacBook status bar label width per session
-  tmux/claude-account.sh  the Claude Code account this tmux uses, for the status bar
+  tmux/claude-account.sh  legacy native-login helper; routed accounts show in each Claude status line
 index.html           the page at xiaweiliu.com/dotfiles
 ```
 
