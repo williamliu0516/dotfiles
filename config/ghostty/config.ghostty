@@ -9,8 +9,8 @@ font-feature = +cv01
 font-feature = +cv02
 font-feature = +zero
 
-# 行高 +12%，排版更透气（也更好读）
-adjust-cell-height = 12%
+# 行高 +10%，排版更透气；比 12% 少一点，让当前窗口高度能多放一行
+adjust-cell-height = 10%
 
 # ===== 可读性（我的改动，非他的配置，见说明）=====
 minimum-contrast = 1.8

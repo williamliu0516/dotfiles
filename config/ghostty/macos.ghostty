@@ -10,7 +10,10 @@ macos-option-as-alt = true
 fullscreen = non-native
 macos-non-native-fullscreen = true
 # 给顶部摄像头和状态栏下方的内容留出空间。
-window-padding-y = 20,8
+window-padding-y = 20,4
+# 主配置开了 padding-balance，它会把网格上下居中，顶部给刘海留的 20pt 就被镜像到底部，
+# 底部平白空出一截。macOS 上关掉，多出来的零头只留在底部。
+window-padding-balance = false
 
 # ===== 毛玻璃：静态壁纸图代替实时模糊 =====
 # 窗口不透明，背景铺一张预先模糊好的当前壁纸截图（backgrounds/make.sh 生成，不进 git）。
