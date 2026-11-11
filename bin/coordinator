@@ -1,0 +1,62 @@
+#!/bin/sh
+# coordinator: open Zool's coordinator session (hermes-db), starting it when none is running.
+# It runs on the default sign-in, not through `we` / `will`: claude-quota-watch follows the session named
+# hermes-db and moves it between the two Claude accounts by switching that sign-in (reel docs/coordinator.md,
+# Who does what). Rules are read from the train worktree, so it starts there.
+#   coordinator           attach to the running one; else start it in the background, then attach
+#   coordinator status    say whether it is running
+#   coordinator --print   print the start command and do nothing
+NAME=hermes-db
+TRAIN="$HOME/projects/reel-macparity"
+FIRST="You are Zool's coordinator (session hermes-db). Follow docs/coordinator.md's After compaction section: check the ledger summary and .agents/coord-inbox.tsv, arm the Monitor on the inbox, then tell me in a few lines what is open."
+
+# In tmux, go through tmux-kgp like the zsh `claude` function, so images still show.
+run_claude() {
+  if [ -n "${TMUX:-}" ] && [ -t 0 ] && [ -t 1 ] && kgp=$(command -v tmux-kgp); then
+    py="$HOME/.local/share/claude-img/claude"
+    "$py" -c '' 2>/dev/null || py=python3
+    CLAUDE_CODE_FORCE_TERMINAL_IMAGES=1 "$py" "$kgp" claude "$@"
+  else
+    claude "$@"
+  fi
+}
+
+# 0 running, 1 not running, 2 the session list could not be read
+running() {
+  claude agents --json 2>/dev/null | python3 -c '
+import json, sys
+try:
+    rows = json.load(sys.stdin)
+except ValueError:
+    sys.exit(2)
+sys.exit(0 if any(r.get("name") == sys.argv[1] for r in rows) else 1)' "$NAME"
+}
+
+start() {
+  run_claude --bg --settings "$HOME/.claude/direct-settings.json" --model opus --effort high \
+    --permission-mode auto -n "$NAME" "$FIRST"
+}
+
+case "${1:-}" in
+  --print)
+    echo "cd $TRAIN && claude --bg --settings ~/.claude/direct-settings.json --model opus --effort high --permission-mode auto -n $NAME '<first prompt>' && claude attach $NAME"
+    exit 0 ;;
+  status)
+    running; r=$?
+    case $r in 0) echo "$NAME is running" ;; 1) echo "$NAME is not running" ;; *) echo "could not read the session list (claude agents --json)" >&2 ;; esac
+    exit $r ;;
+  "") ;;
+  *) echo "usage: coordinator [status | --print]" >&2; exit 2 ;;
+esac
+
+running; r=$?
+if [ $r = 2 ]; then
+  echo "coordinator: could not read the session list (claude agents --json); not starting a second one" >&2
+  exit 1
+fi
+if [ $r = 1 ]; then
+  [ -d "$TRAIN" ] || { echo "coordinator: $TRAIN is missing" >&2; exit 1; }
+  cd "$TRAIN" || exit 1
+  start || { echo "coordinator: the background start failed" >&2; exit 1; }
+fi
+run_claude attach "$NAME"

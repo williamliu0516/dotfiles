@@ -8,4 +8,5 @@ set -euo pipefail
 have claude || warn "还没装 Claude Code，装好后 we / will 才能用"
 link "$DOTFILES/bin/claude-as" "$HOME/.local/bin/we"
 link "$DOTFILES/bin/claude-as" "$HOME/.local/bin/will"
+link "$DOTFILES/bin/coordinator" "$HOME/.local/bin/coordinator"
 info "第一次用先各登录一次：we auth login、will auth login（浏览器授权页上看清是哪个账号）"
