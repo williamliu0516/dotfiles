@@ -1,0 +1,37 @@
+#!/bin/sh
+# we / will: start Claude Code on one Claude account, connected directly (not through a
+# gateway such as magpie). Linked as `we` (team account) and `will` (personal account) in
+# ~/.local/bin by modules/claude-accounts.
+# Each account keeps its own config dir (its login, .claude.json, plugins, synced skills); the
+# items in SHARED point back at ~/.claude, so memory, CLAUDE.md, hooks, settings and transcripts
+# stay one set, and a session started with `we` can be resumed with `will --resume <id>`.
+# ~/.claude/direct-settings.json, when it exists, is passed with --settings: it clears a
+# gateway's base URL and token from the shared settings.json and maps the model aliases back
+# to Claude models. It goes before subcommands too (`we auth login`), because settings.json's
+# env overrides the shell's.
+
+case "$(basename "$0")" in
+  we)   dir="$HOME/.claude-team" ;;
+  will) dir="$HOME/.claude-ultra" ;;
+  *)    echo "claude-as: call it as we or will" >&2; exit 2 ;;
+esac
+
+SHARED="CLAUDE.md settings.json settings.local.json projects sessions file-history history.jsonl hooks"
+mkdir -p "$dir"
+for n in $SHARED; do
+  if [ ! -e "$dir/$n" ] && [ ! -L "$dir/$n" ] && [ -e "$HOME/.claude/$n" ]; then
+    ln -s "$HOME/.claude/$n" "$dir/$n"
+  fi
+done
+export CLAUDE_CONFIG_DIR="$dir"
+
+direct="$HOME/.claude/direct-settings.json"
+[ -f "$direct" ] && set -- --settings "$direct" "$@"
+
+# In tmux, start it under tmux-kgp like the zsh `claude` function does, so images still show.
+if [ -n "${TMUX:-}" ] && [ -t 0 ] && [ -t 1 ] && kgp=$(command -v tmux-kgp); then
+  py="$HOME/.local/share/claude-img/claude"
+  "$py" -c '' 2>/dev/null || py=python3
+  CLAUDE_CODE_FORCE_TERMINAL_IMAGES=1 exec "$py" "$kgp" claude "$@"
+fi
+exec claude "$@"

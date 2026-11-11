@@ -22,6 +22,7 @@ To update a machine, run the same command again. If something has edited a file 
 | `claude-tmux` | tmux window numbers coloured by Claude Code state; Claude panes reopen their conversation after a restore (needs `terminal`) | ✓ | ✓ |
 | `claude-push` | Phone / iPad push via [ntfy](https://ntfy.sh) whenever Claude stops or waits for approval | ✓ | ✓ |
 | `claude-img` | Images Claude reads or screenshots appear right in the transcript, as in the mobile app, also inside tmux; needs Ghostty or kitty (needs `terminal`) | ✓ | ✓ |
+| `claude-accounts` | `we` and `will` start Claude Code on two Claude accounts (team / personal), connected directly; memory, CLAUDE.md, hooks, settings and transcripts stay shared, so `will --resume <id>` picks up a `we` session | ✓ | ✓ |
 | `claude-sims` | At most 3 iOS simulators booted across all Claude Code sessions; shuts them down when their session ends or after 45 min unused | | ✓ |
 | `claude-killguard` | Lists what a `pkill` / `killall` / `kill` would hit before Claude Code runs it; refuses options after the pattern, and kills that reach another session, Docker or the system until Claude has seen the list | | ✓ |
 | `claude-statusline` | Claude Code status line — adapts to pane width, with actual model/account and numeric 5h/weekly usage; supports Magpie routing. From [claude-status-bar](https://github.com/williamliu0516/claude-status-bar) | ✓ | ✓ |
@@ -146,6 +147,7 @@ config/
   gnome/     extensions.dconf — extension settings, merged with dconf load
 bin/
   claude-push           Claude Code hook → ntfy push; `claude-push --test` sends one
+  claude-as             `we` / `will`: Claude Code on one account, its own login, the rest of ~/.claude shared
   claude-img            PNG conversion and terminal facts for the inline-images plugin
   tmux-kgp              pty in front of Claude Code that lets its kitty images through tmux, ids kept apart per session
   claude-sims           Claude Code hooks + launchd job that cap and shut down iOS simulators
