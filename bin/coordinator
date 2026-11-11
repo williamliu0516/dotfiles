@@ -7,6 +7,8 @@
 #   coordinator status    say whether it is running
 #   coordinator --print   print the start command and do nothing
 NAME=hermes-db
+# Default sign-in: drop a we / will config dir inherited from the shell (claude-as sets it).
+unset CLAUDE_CONFIG_DIR
 TRAIN="$HOME/projects/reel-macparity"
 FIRST="You are Zool's coordinator (session hermes-db). Follow docs/coordinator.md's After compaction section: read the newest ~/projects/reel/.agents/handoff-*.md if one is newer than your start, check the ledger summary and .agents/coord-inbox.tsv, arm the Monitor on the inbox, then tell me what is open."
 
@@ -21,15 +23,23 @@ run_claude() {
   fi
 }
 
-# 0 running, 1 not running, 2 the session list could not be read
-running() {
+# Print the id of the newest live session named $NAME. 0 found, 1 none, 2 the session list could not be read.
+# Attach goes by id: stopped sessions keep the name, so `claude attach hermes-db` stops matching after a restart.
+live_id() {
   claude agents --json 2>/dev/null | python3 -c '
 import json, sys
 try:
     rows = json.load(sys.stdin)
 except ValueError:
     sys.exit(2)
-sys.exit(0 if any(r.get("name") == sys.argv[1] for r in rows) else 1)' "$NAME"
+live = [r for r in rows if r.get("name") == sys.argv[1] and r.get("state") not in ("stopped", "done", "failed")]
+if not live:
+    sys.exit(1)
+r = max(live, key=lambda r: r.get("startedAt", 0))
+if r.get("kind") == "interactive":
+    print("coordinator: %s is open in another terminal (pid %s, %s)" % (sys.argv[1], r.get("pid"), r.get("cwd")), file=sys.stderr)
+    sys.exit(3)
+print(r.get("id") or r["sessionId"][:8])' "$NAME"
 }
 
 start() {
@@ -39,24 +49,30 @@ start() {
 
 case "${1:-}" in
   --print)
-    echo "cd $TRAIN && claude --bg --settings ~/.claude/direct-settings.json --model opus --effort high --permission-mode auto -n $NAME '<first prompt>' && claude attach $NAME"
+    echo "cd $TRAIN && claude --bg --settings ~/.claude/direct-settings.json --model opus --effort high --permission-mode auto -n $NAME '<first prompt>' && claude attach <id>"
     exit 0 ;;
   status)
-    running; r=$?
-    case $r in 0) echo "$NAME is running" ;; 1) echo "$NAME is not running" ;; *) echo "could not read the session list (claude agents --json)" >&2 ;; esac
+    id=$(live_id); r=$?
+    case $r in 0) echo "$NAME is running ($id)" ;; 1) echo "$NAME is not running" ;; 2) echo "could not read the session list (claude agents --json)" >&2 ;; esac
     exit $r ;;
   "") ;;
   *) echo "usage: coordinator [status | --print]" >&2; exit 2 ;;
 esac
 
-running; r=$?
+id=$(live_id); r=$?
 if [ $r = 2 ]; then
   echo "coordinator: could not read the session list (claude agents --json); not starting a second one" >&2
   exit 1
 fi
+[ $r = 3 ] && exit 1
 if [ $r = 1 ]; then
   [ -d "$TRAIN" ] || { echo "coordinator: $TRAIN is missing" >&2; exit 1; }
   cd "$TRAIN" || exit 1
   start || { echo "coordinator: the background start failed" >&2; exit 1; }
+  for _ in 1 2 3 4 5; do
+    id=$(live_id) && break
+    sleep 1
+  done
+  [ -n "$id" ] || { echo "coordinator: started, but $NAME is not in the session list; try claude agents" >&2; exit 1; }
 fi
-run_claude attach "$NAME"
+run_claude attach "$id"
