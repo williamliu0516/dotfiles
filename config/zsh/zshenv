@@ -15,6 +15,9 @@ fi
 for d in /nix/var/nix/profiles/default/bin "$HOME/.nix-profile/bin"; do
   [ -d "$d" ] && path=("$d" $path)
 done
+# 没有 Nix、也没有 sudo 的 Linux 机器（legion）上自己编译的 tmux 装在这里，排在最前面盖过 apt 的老版本。
+# 不放 ~/.local/bin：那里的 tmux 是放状态栏脚本的目录
+[ -d "$HOME/.local/opt/tmux/bin" ] && path=("$HOME/.local/opt/tmux/bin" $path)
 # mosh-server 必须有 UTF-8 locale，客户端没带 LANG 过来时给个默认值
 if [ -z "${LANG:-}" ] && [ -z "${LC_ALL:-}" ]; then
   export LANG=en_US.UTF-8
