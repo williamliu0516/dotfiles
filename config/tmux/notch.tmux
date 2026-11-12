@@ -36,7 +36,11 @@ set-hook -g client-detached[90] 'set -gF @notch-clients "#{L:#{?#{m:* #{client_p
 # 摄像头区域 102 像素，按客户端报的字符宽度换成列数再加两列边距；终端不报字符宽度（mosh、多数 iPad 客户端）时留 8 列
 set -g @notch-pixels '102'
 set -g @notch-gap '#{?#{e|>:#{client_cell_width},0},#{e|+:#{e|/:#{e|+:#{@notch-pixels},#{e|-:#{client_cell_width},1}},#{client_cell_width}},2},8}'
-set -g @notch-limit '#{e|/:#{e|-:#{e|-:#{e|/:#{client_width},2},#{?#{e|>:#{w;T:status-left},42},#{w;T:status-left},42}},#{e|+:#{e|/:#{e|+:#{E:@notch-gap},1},2},4}},#{E:@notch-cell}}'
+# 左侧按 status-left-length 和 42 里较大的预留，不去量 status-left 本身：@notch-limit 会在窗口列表的 #{W:} 循环里
+# 逐个窗口求值，而 status-left 里的 @cc-waiting 带 #{S:#{W:}}，tmux 3.8 在 W 循环里嵌套 S/W 循环后，后面的窗口会
+# 换成最后遍历到的那个会话的窗口（名字错、当前窗口的高亮消失，有多个会话时才出现）。status-left 最宽也只画到
+# status-left-length，结果和量出来的一样
+set -g @notch-limit '#{e|/:#{e|-:#{e|-:#{e|/:#{client_width},2},#{?#{e|>:#{status-left-length},42},#{status-left-length},42}},#{e|+:#{e|/:#{e|+:#{E:@notch-gap},1},2},4}},#{E:@notch-cell}}'
 set -g @notch-active-order '#{e|-:#{active_window_index},#{base-index}}'
 set -g @notch-page-size '#{e|*:#{E:@notch-limit},2}'
 set -g @notch-start '#{e|+:#{base-index},#{e|*:#{e|/:#{E:@notch-active-order},#{E:@notch-page-size}},#{E:@notch-page-size}}}'
