@@ -26,7 +26,22 @@ done
 export CLAUDE_CONFIG_DIR="$dir"
 
 direct="$HOME/.claude/direct-settings.json"
-[ -f "$direct" ] && set -- --settings "$direct" "$@"
+# `we --peer ...`: a Zool peer session. ~/.claude/peer-settings.json switches off what peers do
+# not use (claude.ai connectors, Workflow, org-synced skills, feedback tools). Claude Code keeps
+# only the last --settings it is given, so the two files are merged here into one JSON string.
+if [ "${1:-}" = "--peer" ]; then
+  shift
+  peer="$HOME/.claude/peer-settings.json"
+  [ -f "$peer" ] || { echo "claude-as: --peer needs $peer" >&2; exit 2; }
+  if [ -f "$direct" ]; then
+    merged=$(jq -cs '.[0] * .[1]' "$direct" "$peer") || { echo "claude-as: cannot merge $direct and $peer" >&2; exit 2; }
+  else
+    merged=$(jq -c . "$peer") || exit 2
+  fi
+  set -- --settings "$merged" "$@"
+elif [ -f "$direct" ]; then
+  set -- --settings "$direct" "$@"
+fi
 
 # In tmux, start it under tmux-kgp like the zsh `claude` function does, so images still show.
 if [ -n "${TMUX:-}" ] && [ -t 0 ] && [ -t 1 ] && kgp=$(command -v tmux-kgp); then
