@@ -12,6 +12,12 @@ tmux 不认 kitty 图片协议（kitty graphics protocol）：程序直接写的
 
 3. 用文件传的图（t=f，inline-images 插件就是这样传的）按改好的 id 登记到 ~/.cache/webmosh/kitty/<id>，一行
    "<列> <行> <PNG 路径>"：webmosh 的网页终端（mosh 不带图片）照这个向本机要图，画在占位符上。
+4. 用文件传的图改成直接传数据（t=f → t=d，base64 分块）。t=f 只给外层终端一个路径，终端在它自己的
+   机器上读：本机的 Ghostty 读得到，从别的电脑 ssh 进来（sshx）的 Ghostty 读不到，只剩空格子。
+5. 图片只在发出那一刻送到当时看着的终端，后来才接进 tmux 的终端没有。收到 SIGUSR2 时，把这个会话最近
+   发过的几张图重发一遍（等 CMD 输出停下来再发，免得插进半条转义序列里）。tmux 的 client-attached 钩子
+   跑 `tmux-kgp --replay 会话名` 发这个信号，只发给 ~/.cache/claude-img/kgp-replay/ 里登记过的进程：
+   旧版本的 tmux-kgp 不认 SIGUSR2，收到会直接退出。
 
 Claude Code 要配 CLAUDE_CODE_FORCE_TERMINAL_IMAGES=1 才会在 tmux 里画图（zshrc 里的 claude 函数一起设好）。
 CMD 按 Ctrl+Z 自己挂起时，这里跟着挂起，fg 回来再叫醒它。
@@ -38,6 +44,10 @@ IDS = os.path.expanduser("~/.cache/claude-img/kgp-ids")
 SPOOL = os.path.join(os.environ.get("XDG_CACHE_HOME") or os.path.expanduser("~/.cache"), "webmosh", "kitty")
 SPOOL_DAYS = 14
 LAUNCHER = os.path.expanduser("~/.local/share/claude-img/claude")
+REPLAY_DIR = os.path.expanduser("~/.cache/claude-img/kgp-replay")
+REPLAY_KEEP = 6          # 每个会话记住最近几张图，接入时重发
+CHUNK = 4096             # kitty 规定一块 base64 最多 4096 字节
+MAX_INLINE = 20 << 20    # 比这大的 PNG 还是按路径传
 
 # kitty 的 rowcolumn-diacritics.txt：第 n 个附加符号表示数字 n
 DIACRITICS = [
@@ -78,13 +88,24 @@ class Rewriter:
         self.high = high
         self.mark = chr(DIACRITICS[high]).encode()
         self.pending = b""
+        self.sent = {}      # 图片 id -> (指令, PNG 路径)，最近 REPLAY_KEEP 张，按发出先后
 
     def wrap(self, seq):
         ctrl, sep, payload = seq[3:-2].partition(b";")
         ctrl = ID_RE.sub(lambda m: b"i=%d" % (self.high << 24 | int(m.group(1)) & 0xFFFFFF), ctrl)
-        spool(ctrl, payload)
-        seq = APC + ctrl + sep + payload + ST
-        return b"\x1bPtmux;" + seq.replace(b"\x1b", b"\x1b\x1b") + ST
+        found = spool(ctrl, payload)
+        if found:
+            out = inline(ctrl, found[1])
+            if out:
+                self.sent.pop(found[0], None)
+                self.sent[found[0]] = (ctrl, found[1])
+                while len(self.sent) > REPLAY_KEEP:
+                    self.sent.pop(next(iter(self.sent)))
+                return out
+        return passthrough(APC + ctrl + sep + payload + ST)
+
+    def replay(self):
+        return b"".join(inline(ctrl, path) or b"" for ctrl, path in list(self.sent.values()))
 
     def placeholder(self, data, p):
         """p 处是 U+10EEEE：返回 (改好的字节, 下一个位置)；后面不够判断时返回 None。"""
@@ -143,18 +164,45 @@ class Rewriter:
             i = k + 2
 
 
+def passthrough(seq):
+    return b"\x1bPtmux;" + seq.replace(b"\x1b", b"\x1b\x1b") + ST
+
+
+def inline(ctrl, path):
+    """t=f 的指令改成 t=d，把 PNG 的数据分块放进去，每块一条 passthrough；读不到文件时返回 None。"""
+    try:
+        if os.path.getsize(path) > MAX_INLINE:
+            return None
+        with open(path, "rb") as f:
+            data = base64.b64encode(f.read())
+    except OSError:
+        return None
+    kvs = [kv for kv in ctrl.split(b",") if not kv.startswith((b"t=", b"m=", b"S=", b"O="))]
+    quiet = [kv for kv in kvs if kv.startswith(b"q=")]
+    chunks = [data[i:i + CHUNK] for i in range(0, len(data), CHUNK)] or [b""]
+    out = []
+    for n, chunk in enumerate(chunks):
+        more = b"m=1" if n < len(chunks) - 1 else b"m=0"
+        head = kvs + [b"t=d", more] if n == 0 else quiet + [more]
+        out.append(passthrough(APC + b",".join(head) + b";" + chunk + ST))
+    return b"".join(out)
+
+
 def spool(ctrl, payload):
-    """一张用文件传的 PNG（a=T、t=f、f=100）登记给 webmosh：~/.cache/webmosh/kitty/<id> = "<列> <行> <路径>"。"""
+    """一张用文件传的 PNG（a=T、t=f、f=100）登记给 webmosh：~/.cache/webmosh/kitty/<id> = "<列> <行> <路径>"。
+    是这样的图就返回 (id, 路径)。"""
     keys = dict(kv.split(b"=", 1) for kv in ctrl.split(b",") if b"=" in kv)
     if keys.get(b"t") != b"f" or keys.get(b"f") != b"100" or keys.get(b"a", b"t") not in (b"T", b"t"):
-        return
+        return None
+    if keys.get(b"m", b"0") != b"0":
+        return None
     try:
         image, cols, rows = int(keys[b"i"]), int(keys.get(b"c", b"0")), int(keys.get(b"r", b"0"))
         path = base64.b64decode(payload).decode()
     except (KeyError, ValueError):
-        return
+        return None
     if not path.startswith("/") or "\n" in path:
-        return
+        return None
     try:
         os.makedirs(SPOOL, exist_ok=True)
         tmp = os.path.join(SPOOL, f".{image}.tmp")
@@ -163,6 +211,42 @@ def spool(ctrl, payload):
         os.replace(tmp, os.path.join(SPOOL, str(image)))
     except OSError:
         pass
+    return image, path
+
+
+def send_replay(session):
+    """tmux 的 client-attached 钩子调用：叫这个 tmux 会话里登记过的 tmux-kgp 把最近的图重发一遍。"""
+    try:
+        panes = subprocess.run(["tmux", "list-panes", "-s", "-t", "=" + session, "-F", "#{pane_tty}"],
+                               capture_output=True, text=True, timeout=5)
+        out = subprocess.run(["ps", "-axo", "pid=,tty=,command="], capture_output=True, text=True, timeout=5).stdout
+        names = os.listdir(REPLAY_DIR)
+    except (OSError, subprocess.TimeoutExpired):
+        return
+    if panes.returncode != 0:
+        return
+    ttys = {t.removeprefix("/dev/") for t in panes.stdout.split()}
+    procs = {}
+    for line in out.splitlines():
+        f = line.split(None, 2)
+        if len(f) == 3 and f[0].isdigit():
+            procs[int(f[0])] = (f[1], f[2])
+    for name in names:
+        if not name.isdigit():
+            continue
+        pid = int(name)
+        tty_name, cmd = procs.get(pid, (None, ""))
+        if tty_name is None or "tmux-kgp" not in cmd:
+            try:
+                os.unlink(os.path.join(REPLAY_DIR, name))   # 进程没了，留下的登记
+            except OSError:
+                pass
+            continue
+        if tty_name in ttys:
+            try:
+                os.kill(pid, signal.SIGUSR2)
+            except OSError:
+                pass
 
 
 def prune_spool():
@@ -369,6 +453,9 @@ def main():
     if argv == ["--launcher"]:           # 只更新改名的启动器（安装时用）
         refresh_launcher()
         return
+    if len(argv) == 2 and argv[0] == "--replay":   # tmux 钩子：有终端接进了这个会话
+        send_replay(argv[1])
+        return
     if not argv:
         sys.exit(__doc__.strip())
     if not os.environ.get("TMUX") or not os.isatty(0) or not os.isatty(1):
@@ -402,8 +489,15 @@ def main():
         except OSError:
             pass
 
-    for sig in (signal.SIGWINCH, signal.SIGCHLD, signal.SIGTERM, signal.SIGHUP, signal.SIGCONT):
+    for sig in (signal.SIGWINCH, signal.SIGCHLD, signal.SIGTERM, signal.SIGHUP, signal.SIGCONT, signal.SIGUSR2):
         signal.signal(sig, on_signal)
+    replay_mark = os.path.join(REPLAY_DIR, str(os.getpid()))
+    try:
+        os.makedirs(REPLAY_DIR, exist_ok=True)
+        open(replay_mark, "w").close()
+    except OSError:
+        pass
+    replay_wanted = False
 
     def resize():
         s = winsize(0)
@@ -420,8 +514,16 @@ def main():
     try:
         while status is None:
             try:
-                ready, _, _ = select.select([0, master, wake_r], [], [])
+                ready, _, _ = select.select([0, master, wake_r], [], [], 0.15 if replay_wanted else None)
             except InterruptedError:
+                continue
+            if not ready and replay_wanted and not rw.pending:
+                # CMD 有一会儿没输出了，不会正好在半条转义序列中间：重发图片
+                replay_wanted = False
+                try:
+                    write_all(1, rw.replay())
+                except OSError:
+                    pass
                 continue
             if wake_r in ready:
                 try:
@@ -433,6 +535,8 @@ def main():
                     sigs.add(got.pop())
                 if signal.SIGWINCH in sigs:
                     resize()
+                if signal.SIGUSR2 in sigs:
+                    replay_wanted = bool(rw.sent)
                 if signal.SIGHUP in sigs:       # 窗格的终端挂断了
                     status = hang_up(master, pid)
                     master = None
@@ -461,7 +565,12 @@ def main():
                     data = b""
                 if data:
                     try:
-                        write_all(1, rw.feed(data))
+                        out = rw.feed(data)
+                        if replay_wanted and not rw.pending and out.endswith(b"\x1b[?2026l"):
+                            # 刚画完一帧（同步输出结束）：一直有输出时也能在这里插进去
+                            replay_wanted = False
+                            out += rw.replay()
+                        write_all(1, out)
                     except OSError:             # 窗格的终端没了
                         status = hang_up(master, pid)
                         master = None
@@ -498,6 +607,10 @@ def main():
         except termios.error:
             pass
         release_id(high)
+        try:
+            os.unlink(replay_mark)
+        except OSError:
+            pass
     code = os.waitstatus_to_exitcode(status) if status is not None else 1
     sys.exit(code if code >= 0 else 128 - code)
 
