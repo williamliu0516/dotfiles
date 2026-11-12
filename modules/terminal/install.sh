@@ -173,6 +173,7 @@ link "$DOTFILES/config/zsh/zshrc"                 "$HOME/.config/zsh/.zshrc"
 [ -f "$DOTFILES/config/zsh/p10k.zsh" ] && \
 link "$DOTFILES/config/zsh/p10k.zsh"              "$HOME/.config/zsh/.p10k.zsh"
 link "$DOTFILES/config/tmux/tmux.conf"            "$HOME/.config/tmux/tmux.conf"
+link "$DOTFILES/config/tmux/notch.tmux"           "$HOME/.config/tmux/notch.tmux"
 link "$DOTFILES/config/ghostty/config.ghostty"    "$HOME/.config/ghostty/config.ghostty"
 # 系统专属的 Ghostty 设置：主配置用 config-file 引入这个文件
 link "$DOTFILES/config/ghostty/$OS.ghostty"       "$HOME/.config/ghostty/platform.ghostty"
@@ -202,10 +203,12 @@ mkdir -p "$HOME/.local/bin/tmux"
 link "$DOTFILES/bin/theme-preview"                "$HOME/.local/bin/theme-preview"
 link "$DOTFILES/bin/notify"                       "$HOME/.local/bin/notify"
 link "$DOTFILES/bin/btop"                         "$HOME/.local/bin/btop"
+link "$DOTFILES/bin/sshx"                         "$HOME/.local/bin/sshx"
+link "$DOTFILES/bin/moshx"                        "$HOME/.local/bin/moshx"
 for f in "$DOTFILES"/bin/tmux/*.sh; do
   link "$f" "$HOME/.local/bin/tmux/$(basename "$f")"
 done
-chmod +x "$DOTFILES"/bin/theme-preview "$DOTFILES"/bin/notify "$DOTFILES"/bin/btop "$DOTFILES"/bin/tmux/*.sh 2>/dev/null || true
+chmod +x "$DOTFILES"/bin/theme-preview "$DOTFILES"/bin/notify "$DOTFILES"/bin/btop "$DOTFILES"/bin/sshx "$DOTFILES"/bin/tmux/*.sh 2>/dev/null || true
 
 # ── 6b. 正在运行的 tmux ─────────────────────────────────────
 # tmux server 只在启动时读一次配置，之后常驻（关掉终端窗口也不退出），所以光换文件 Alt+m 菜单和键位还是旧的。
