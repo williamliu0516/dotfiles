@@ -48,10 +48,19 @@ set -g @notch-end '#{?#{e|>=:#{last_window_index},#{e|+:#{E:@notch-start},#{E:@n
 set -g @notch-split '#{e|+:#{E:@notch-start},#{e|/:#{e|+:#{e|-:#{E:@notch-end},#{E:@notch-start}},1},2}}'
 set -g @notch-left '#{?#{e|>:#{E:@notch-start},#{base-index}},‹,}#{W:#{?#{&&:#{e|>=:#{window_index},#{E:@notch-start}},#{e|<:#{window_index},#{E:@notch-split}}},#[range=window|#{window_index}]#{=/11/…:#{T:window-status-format}}#[norange default],},#{?#{&&:#{e|>=:#{window_index},#{E:@notch-start}},#{e|<:#{window_index},#{E:@notch-split}}},#[range=window|#{window_index}]#{=/11/…:#{T:window-status-current-format}}#[norange default],}}'
 set -g @notch-right '#{W:#{?#{&&:#{e|>=:#{window_index},#{E:@notch-split}},#{e|<:#{window_index},#{E:@notch-end}}},#[range=window|#{window_index}]#{=/11/…:#{T:window-status-format}}#[norange default],},#{?#{&&:#{e|>=:#{window_index},#{E:@notch-split}},#{e|<:#{window_index},#{E:@notch-end}}},#[range=window|#{window_index}]#{=/11/…:#{T:window-status-current-format}}#[norange default],}}#{?#{e|<=:#{E:@notch-end},#{last_window_index}},›,}'
-# 左边补两列空白，使可见标签整体右移一列，对准相机中心。
-set -g @notch-format '#[align=left range=left #{E:status-left-style}]#{T:status-left}#[norange default]#[list=on align=absolute-centre]  #{?#{e|>:#{w;E:@notch-right},#{w;E:@notch-left}},#{R: ,#{e|-:#{w;E:@notch-right},#{w;E:@notch-left}}},}#{E:@notch-left}#{R: ,#{E:@notch-gap}}#{E:@notch-right}#{?#{e|>:#{w;E:@notch-left},#{w;E:@notch-right}},#{R: ,#{e|-:#{w;E:@notch-left},#{w;E:@notch-right}}},}#[nolist align=right range=right #{E:status-right-style}]#{T:status-right}#[norange default]'
+# 快速路径：窗口一页放得下（多数时候）时不用分页，按编号中点分左右，每个窗口只比一次编号。
+# 分页那套每个窗口都要从头推一遍 start / split / end，整行比默认状态栏慢 4 倍左右；tmux 一行格式算超过 100 ms
+# 就半途放弃（format.c 的 FORMAT_TIME_LIMIT），机器负载很高时状态栏只剩左边一截、忽有忽无。窗口要分页时才走上面那套
+set -g @notch-fsplit '#{e|+:#{base-index},#{e|/:#{e|+:#{e|-:#{last_window_index},#{base-index}},2},2}}'
+set -g @notch-fleft '#{W:#{?#{e|<:#{window_index},#{E:@notch-fsplit}},#[range=window|#{window_index}]#{=/11/…:#{T:window-status-format}}#[norange default],},#{?#{e|<:#{window_index},#{E:@notch-fsplit}},#[range=window|#{window_index}]#{=/11/…:#{T:window-status-current-format}}#[norange default],}}'
+set -g @notch-fright '#{W:#{?#{e|>=:#{window_index},#{E:@notch-fsplit}},#[range=window|#{window_index}]#{=/11/…:#{T:window-status-format}}#[norange default],},#{?#{e|>=:#{window_index},#{E:@notch-fsplit}},#[range=window|#{window_index}]#{=/11/…:#{T:window-status-current-format}}#[norange default],}}'
+# 整行模板：@LEFT / @RIGHT 换成分页版或快速版两组。两组宽度不一样时给窄的一边补空格，让刘海留在正中；
+# #{R:} 次数为负时输出空串，所以不用先比大小。左边先补两列，使可见标签整体右移一列，对准相机中心
+set -g @notch-tpl '#[align=left range=left #{E:status-left-style}]#{T:status-left}#[norange default]#[list=on align=absolute-centre]  #{R: ,#{e|-:#{w;E:@RIGHT},#{w;E:@LEFT}}}#{E:@LEFT}#{R: ,#{E:@notch-gap}}#{E:@RIGHT}#{R: ,#{e|-:#{w;E:@LEFT},#{w;E:@RIGHT}}}#[nolist align=right range=right #{E:status-right-style}]#{T:status-right}#[norange default]'
+set -gF @notch-format '#{s/@LEFT/@notch-left/;s/@RIGHT/@notch-right/:@notch-tpl}'
+set -gF @notch-format-fast '#{s/@LEFT/@notch-fleft/;s/@RIGHT/@notch-fright/:@notch-tpl}'
 
 # 这个客户端要不要让出刘海
 set -g @notch-client '#{||:#{&&:#{@notch-local},#{m:*ghostty*,#{client_termname}}},#{m:* #{client_pid} *,#{@notch-clients}}}'
-set -g 'status-format[0]' '#{?#{&&:#{E:@notch-client},#{==:#{status-position},top},#{e|>=:#{client_width},120},#{e|>=:#{active_window_index},#{base-index}},#{e|>:#{E:@notch-limit},0}},#{E:@notch-format},#{E:@notch-default}}'
+set -g 'status-format[0]' '#{?#{&&:#{E:@notch-client},#{==:#{status-position},top},#{e|>=:#{client_width},120},#{e|>=:#{active_window_index},#{base-index}},#{e|>:#{E:@notch-limit},0}},#{?#{e|<=:#{e|+:#{e|-:#{last_window_index},#{base-index}},1},#{E:@notch-page-size}},#{E:@notch-format-fast},#{E:@notch-format}},#{E:@notch-default}}'
 %endif
