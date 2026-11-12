@@ -27,6 +27,17 @@ background-image-position = center
 # Ctrl+Enter 在 macOS 上默认没绑定，补上，和 Linux 同一个键；Cmd+Enter 仍然可用
 keybind = ctrl+enter=toggle_fullscreen
 
+# ===== 用全屏窗口代替标签页 =====
+# 非原生全屏下没有原生标签页，Cmd+T 只会弹 "Cannot Create New Tab"，改成开新窗口。fullscreen = non-native 让新窗口
+# 也进全屏，但从全屏窗口里开的新窗口位置算错：顶部空出菜单栏那么高一条（Ghostty 1.4）。在按键上串 toggle_fullscreen
+# 没用，串联的动作落在旧窗口上，会把旧窗口切成小窗；所以由新窗口里的 zsh 启动时调 bin/ghostty-refullscreen，
+# 对这个窗口自己退出再进入一次全屏（等于手按两次 Cmd+Enter）。
+# 全屏窗口叠在一起用起来就像标签页，每个窗口可以连不同的机器（sshx 主机）。
+# Cmd+Shift+←/→ 前后切换，和 iPad 上 WebMosh 切标签同一个键；Cmd+W 关掉当前这个
+keybind = super+t=new_window
+keybind = super+shift+arrow_left=goto_window:previous
+keybind = super+shift+arrow_right=goto_window:next
+
 # ===== 把 Option+←/→ 原样交给 tmux =====
 # Ghostty 在 macOS 上默认把 Option+←/→ 改写成 Esc b / Esc f（按词移动），
 # tmux 收到的是 M-b / M-f 而不是 M-Left / M-Right，Alt+←/→ 切窗口就失效了。

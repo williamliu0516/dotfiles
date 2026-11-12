@@ -1,0 +1,4 @@
+# 带刘海的 Mac：机型号（sysctl -n hw.model）和摄像头区域要让出的像素宽度。
+# tmux.conf（本机状态栏）和 bin/sshx（连到别的机器时）都按这里判断，换电脑只要加一行。
+# 像素宽度量法：全屏 Ghostty 里看刘海遮住几列，乘以字符宽度（tmux display -p '#{client_cell_width}'），再略放宽。
+Mac17,12  102   # MacBook Pro 16" M5 Pro

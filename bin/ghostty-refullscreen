@@ -1,0 +1,28 @@
+#!/usr/bin/env bash
+# ghostty-refullscreen <tty>：把这个 tty 所在的 Ghostty 窗口退出再进入一次非原生全屏。
+# 从全屏窗口里 Cmd+T / Cmd+N 开的新窗口虽然是全屏状态，位置却从菜单栏下面开始，顶部空一条（Ghostty 1.4）；
+# 手按两次 Cmd+Enter 能好，这里替你按。zshrc 在新窗口的 shell 启动时后台调它。
+# 只有一个窗口时什么都不做：那是启动 Ghostty 时的第一个窗口，位置是对的。
+set -u
+[ "$(uname -s)" = Darwin ] || exit 0
+tty=${1:-}
+[ -n "$tty" ] || exit 0
+exec osascript - "$tty" >/dev/null 2>&1 <<'APPLESCRIPT'
+on run argv
+  set want to item 1 of argv
+  tell application "Ghostty"
+    if (count of windows) < 2 then return
+    delay 0.3
+    repeat with w in windows
+      repeat with t in terminals of selected tab of w
+        if tty of t is want then
+          perform action "toggle_fullscreen" on t
+          delay 0.25
+          perform action "toggle_fullscreen" on t
+          return
+        end if
+      end repeat
+    end repeat
+  end tell
+end run
+APPLESCRIPT

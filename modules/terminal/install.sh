@@ -203,12 +203,11 @@ mkdir -p "$HOME/.local/bin/tmux"
 link "$DOTFILES/bin/theme-preview"                "$HOME/.local/bin/theme-preview"
 link "$DOTFILES/bin/notify"                       "$HOME/.local/bin/notify"
 link "$DOTFILES/bin/btop"                         "$HOME/.local/bin/btop"
-link "$DOTFILES/bin/sshx"                         "$HOME/.local/bin/sshx"
-link "$DOTFILES/bin/moshx"                        "$HOME/.local/bin/moshx"
+[ "$OS" = macos ] && link "$DOTFILES/bin/ghostty-refullscreen" "$HOME/.local/bin/ghostty-refullscreen"
 for f in "$DOTFILES"/bin/tmux/*.sh; do
   link "$f" "$HOME/.local/bin/tmux/$(basename "$f")"
 done
-chmod +x "$DOTFILES"/bin/theme-preview "$DOTFILES"/bin/notify "$DOTFILES"/bin/btop "$DOTFILES"/bin/sshx "$DOTFILES"/bin/tmux/*.sh 2>/dev/null || true
+chmod +x "$DOTFILES"/bin/theme-preview "$DOTFILES"/bin/notify "$DOTFILES"/bin/btop "$DOTFILES"/bin/ghostty-refullscreen "$DOTFILES"/bin/tmux/*.sh 2>/dev/null || true
 
 # ── 6b. 正在运行的 tmux ─────────────────────────────────────
 # tmux server 只在启动时读一次配置，之后常驻（关掉终端窗口也不退出），所以光换文件 Alt+m 菜单和键位还是旧的。

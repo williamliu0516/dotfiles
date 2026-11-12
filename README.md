@@ -19,6 +19,7 @@ To update a machine, run the same command again. If something has edited a file 
 | id | | Linux | macOS |
 |---|---|:-:|:-:|
 | `terminal` | Ghostty + tmux + zsh, fonts, plugins | ✓ | ✓ |
+| `remote-tmux` | `sshx host [session]` / `moshx host [session]`: ssh or mosh into another machine and attach its tmux in one step; from the notched MacBook, that client's status line keeps the camera gap | ✓ | ✓ |
 | `claude-tmux` | tmux window numbers coloured by Claude Code state; Claude panes reopen their conversation after a restore (needs `terminal`) | ✓ | ✓ |
 | `claude-push` | Phone / iPad push via [ntfy](https://ntfy.sh) whenever Claude stops or waits for approval | ✓ | ✓ |
 | `claude-img` | Images Claude reads or screenshots appear right in the transcript, as in the mobile app, also inside tmux; needs Ghostty or kitty (needs `terminal`) | ✓ | ✓ |
@@ -66,9 +67,9 @@ On macOS, Option works as Alt, so the tmux keys below are the same on both. Ghos
 
 On macOS, new Ghostty windows start in non-native fullscreen, and `Ctrl+Enter` (or `Cmd+Enter`) toggles it. This fills the display around the camera notch while staying on the current Space; the notch may cover terminal content. To keep Ghostty on a dedicated desktop, create one in Mission Control, move Ghostty there, and use the Dock icon's Options → Assign To → This Desktop. Other apps can still open there unless assigned elsewhere. Native macOS tabs don't work in this mode; use tmux windows. The background is a pre-blurred wallpaper image. A macOS user agent checks for wallpaper changes every minute, regenerates the image when needed, and reloads Ghostty. Apple aerials use a still frame rather than live animation. Run `config/ghostty/backgrounds/make.sh` to refresh it immediately; `ffmpeg` is required.
 
-On the MacBook Pro with model identifier `Mac17,12`, wide Ghostty clients show tmux windows in a stable order around a gap reserved for the camera area (`config/tmux/notch.tmux`); other Mac models use the regular layout. The gap adapts to the client's character width, reserving 102 pixels plus two character columns for the camera area; adjust `@notch-pixels` for another Mac. Switching windows moves the highlight without rearranging the list. The layout uses a smaller width budget when all window names are short; when the list exceeds the available space, `‹` and `›` indicate other pages, and long names are truncated. tmux draws the status line per client, so other clients of the same session (an iPad, another computer) keep the regular layout. tmux cannot detect which display a client is on, so wide Ghostty windows on external displays get the gap too.
+On a notched MacBook listed in `config/tmux/notch-models` (one line per model identifier, with the pixel width to leave for the camera; currently the M5 Pro `Mac17,12`), wide Ghostty clients show tmux windows in a stable order around a gap reserved for the camera area (`config/tmux/notch.tmux`); other Macs use the regular layout. The gap adapts to the client's character width: the listed pixels plus two character columns. `tmux.conf`, `sshx` and the `remote-tmux` module all read that one file, so a new MacBook needs one added line. Switching windows moves the highlight without rearranging the list. The layout uses a smaller width budget when all window names are short; when the list exceeds the available space, `‹` and `›` indicate other pages, and long names are truncated. tmux draws the status line per client, so other clients of the same session (an iPad, another computer) keep the regular layout. tmux cannot detect which display a client is on, so wide Ghostty windows on external displays get the gap too.
 
-To keep the gap when connecting from the MacBook straight to another machine's tmux, use `sshx host [session]` or `moshx host [session]` instead of `ssh` / `mosh`. They copy `notch.tmux` to the remote `~/.cache/tmux-notch.tmux`, load it after attaching, and register that tmux client's pid in `@notch-clients`, so only the MacBook's client gets the gap; the remote machine's own screen and other devices are unaffected. The remote does not need these dotfiles, but its tmux must support `#{R:}` (3.8 does, 3.4 does not; older versions keep the regular layout). If the remote lacks Ghostty's terminfo, the wrapper falls back to `TERM=xterm-256color`. Without a session name they attach to the most recent session or start one; elsewhere, or inside local tmux, they just connect and attach.
+To keep the gap when connecting from the MacBook straight to another machine's tmux, install the `remote-tmux` module and use `sshx host [session]` or `moshx host [session]` instead of `ssh` / `mosh`. They copy `notch.tmux` to the remote `~/.cache/tmux-notch.tmux`, load it after attaching, and register that tmux client's pid in `@notch-clients`, so only the MacBook's client gets the gap; the remote machine's own screen and other devices are unaffected. The remote does not need these dotfiles, but its tmux must support `#{R:}` (3.8 does, 3.4 does not; older versions keep the regular layout). If the remote lacks Ghostty's terminfo, the wrapper falls back to `TERM=xterm-256color`. Without a session name they attach to the most recent session or start one; elsewhere, or inside local tmux, they just connect and attach.
 
 ### tmux
 
@@ -155,12 +156,14 @@ bin/
   claude-sims           Claude Code hooks + launchd job that cap and shut down iOS simulators
   claude-killguard      Claude Code hook that lists what a pkill / killall / kill would hit and refuses the wrong ones
   theme-preview         preview any Ghostty theme in the terminal, ranked by contrast
+  ghostty-refullscreen  macOS: re-enter fullscreen for a Ghostty window opened from a fullscreen one, so it covers the menu bar strip
   sshx / moshx          ssh / mosh into another machine's tmux, carrying the MacBook notch layout for that client only
   tmux/cheatsheet.sh    the Ctrl+b ? popup
   tmux/claude-state.sh  Claude Code hook → tmux window colour, and the pane's session ID
   tmux/claude-resume.sh resurrect hooks: save each pane's Claude session, resume it after a restore
   tmux/save-pane.sh     dump the current pane's scrollback to a file
   tmux/battery.sh       battery segment for the status bar
+  tmux/notch-model.sh   prints this Mac's camera-notch width from config/tmux/notch-models, or fails if it isn't listed
   tmux/claude-account.sh  legacy native-login helper; routed accounts show in each Claude status line
 index.html           the page at xiaweiliu.com/dotfiles
 ```

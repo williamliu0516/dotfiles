@@ -2,7 +2,7 @@
 # 连到别的机器并接进那边的 tmux：sshx 主机 [会话名]；moshx 用法一样，走 mosh。
 #   不带会话名：接回对方最近用的会话，没有就新开；带会话名：接进那个会话，没有就用这个名字新开。
 #
-# 从这台 MacBook（Mac17,12）的 Ghostty 直接连（不在本地 tmux 里）时，顺带把刘海布局带过去：
+# 从带刘海的 MacBook（机型在 config/tmux/notch-models 里）的 Ghostty 直接连（不在本地 tmux 里）时，顺带把刘海布局带过去：
 # 把 config/tmux/notch.tmux 写到对方的 ~/.cache/tmux-notch.tmux，接入后加载它，并把这次接入的
 # tmux 客户端 pid 登记进 @notch-clients。对方的状态栏是每个客户端各算各的，所以只有这个客户端让出刘海，
 # 对方自己的屏幕、iPad 等其他客户端照常。对方不用装这套 dotfiles，但 tmux 要够新（3.8 可以，3.4 不行，见 notch.tmux）。
@@ -18,11 +18,11 @@ if [ $# -lt 1 ] || [ $# -gt 2 ]; then
 fi
 host=$1 session=${2:-}
 
-notch=0
-conf="$HOME/.config/tmux/notch.tmux"
-if [ -z "${TMUX:-}" ] && [ "$(uname -s)" = Darwin ] \
-   && [ "$(/usr/sbin/sysctl -n hw.model 2>/dev/null)" = Mac17,12 ] \
-   && [[ "${TERM:-}" == *ghostty* ]] && [ -r "$conf" ]; then
+notch=0 px=""
+dots=$(cd "$(dirname "$(readlink -f "$0")")/.." && pwd)
+conf="$dots/config/tmux/notch.tmux"
+if [ -z "${TMUX:-}" ] && [[ "${TERM:-}" == *ghostty* ]] && [ -r "$conf" ] \
+   && px=$("$dots/bin/tmux/notch-model.sh"); then
   notch=1
 fi
 
@@ -30,7 +30,7 @@ b64() { base64 | tr -d '\n'; }
 # 参数都转成 base64（空值用 -），这样经过对方登录 shell 和 sh -c 两层也不用操心引号
 arg() { if [ -n "$1" ]; then printf %s "$1" | b64; else printf -; fi; }
 
-# 对方执行的 POSIX sh：$1 会话名 $2 notch.tmux 内容 $3 tmux socket 名，都是 base64 或 -
+# 对方执行的 POSIX sh：$1 会话名 $2 notch.tmux 内容 $3 tmux socket 名 $4 刘海像素，都是 base64 或 -
 remote_script=$(cat <<'EOF'
 d() { [ "$1" = - ] || printf %s "$1" | base64 -d; }
 s=$(d "$1"); k=$(d "$3")
@@ -41,7 +41,7 @@ if [ "$2" != - ]; then
   f="$HOME/.cache/tmux-notch.tmux"
   mkdir -p "$HOME/.cache"
   d "$2" > "$f.$$" && mv "$f.$$" "$f"
-  set -- \; source-file "$f" \; set -gaF @notch-clients " #{client_pid} "
+  set -- \; source-file "$f" \; set -g @notch-pixels "$(d "$4")" \; set -gaF @notch-clients " #{client_pid} "
 else
   set --
 fi
@@ -54,7 +54,7 @@ EOF
 
 file_arg=-
 [ "$notch" = 1 ] && file_arg=$(b64 < "$conf")
-args=("$(arg "$session")" "$file_arg" "$(arg "${SSHX_SOCKET:-}")")
+args=("$(arg "$session")" "$file_arg" "$(arg "${SSHX_SOCKET:-}")" "$(arg "$px")")
 runner="eval \"\$(echo $(printf %s "$remote_script" | b64) | base64 -d)\""
 
 if [ "$mode" = mosh ]; then

@@ -1,3 +1,10 @@
+# ===== macOS Ghostty：从全屏窗口里开的新窗口（Cmd+T / Cmd+N）位置不对，顶部空一条 =====
+# 在第一次画提示符之前把这个窗口退出再进入一次全屏，提示符就不会因为窗口变大被重画出残影。
+# 只有一个窗口时立刻返回（约 0.1 秒）；有别的窗口时约 1 秒。细节见 bin/ghostty-refullscreen。放在 instant prompt 前面，它不输出任何东西
+if [[ $OSTYPE == darwin* && $TERM_PROGRAM == ghostty && -z $TMUX && -o interactive && -x $HOME/.local/bin/ghostty-refullscreen ]]; then
+  "$HOME/.local/bin/ghostty-refullscreen" "$TTY"
+fi
+
 # ===== powerlevel10k instant prompt（必须放最顶部）=====
 if [[ -r "${XDG_CACHE_HOME:-$HOME/.cache}/p10k-instant-prompt-${(%):-%n}.zsh" ]]; then
   source "${XDG_CACHE_HOME:-$HOME/.cache}/p10k-instant-prompt-${(%):-%n}.zsh"
