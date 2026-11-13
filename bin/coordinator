@@ -1,20 +1,41 @@
 #!/bin/sh
 # coordinator: open a long-running coordinator Claude Code session by name, starting it in the background
-# when none is running. It runs on the default sign-in, not through `we` / `will`, so a quota watcher can
-# move it between accounts by switching that sign-in.
-# Which session, where it starts and its first prompt are machine-specific and stay out of the repo:
-# ~/.config/coordinator/config sets COORD_NAME, COORD_DIR and COORD_PROMPT (shell syntax).
+# when none is running, then attach to it.
 #   coordinator           attach to the running one; else start it in the background, then attach
-#   coordinator status    say whether it is running
+#   coordinator status    say whether it is running, and in which config dir
 #   coordinator --print   print the start command and do nothing
+#
+# Everything about the session is machine-specific and stays out of the repo, in ~/.config/coordinator/config
+# (shell syntax):
+#   COORD_NAME          session name (required)
+#   COORD_DIR           directory it starts in (required)
+#   COORD_PROMPT        first prompt
+#   COORD_START_CONFIG  config dir to start it in; "default" (the default) means the plain sign-in, without
+#                       CLAUDE_CONFIG_DIR
+#   COORD_CONFIG_DIRS   config dirs it may be running in, when something (a quota watcher, say) moves it between
+#                       accounts; space-separated, "default" as above. Default: just the start one
+#   COORD_SETTINGS      --settings file (default ~/.claude/direct-settings.json when it exists)
+#   COORD_DENY          comma-separated --disallowedTools
+#   COORD_RC            1 to start it with remote control (--rc <name>)
 CONF="$HOME/.config/coordinator/config"
-[ -r "$CONF" ] || { echo "coordinator: $CONF is missing (COORD_NAME, COORD_DIR, COORD_PROMPT)" >&2; exit 2; }
+[ -r "$CONF" ] || { echo "coordinator: $CONF is missing (see the top of $0)" >&2; exit 2; }
 . "$CONF"
 NAME=${COORD_NAME:?coordinator: COORD_NAME is not set in $CONF}
 TRAIN=${COORD_DIR:?coordinator: COORD_DIR is not set in $CONF}
 FIRST=${COORD_PROMPT:-}
-# Default sign-in: drop a we / will config dir inherited from the shell (claude-as sets it).
+START_DIR=${COORD_START_CONFIG:-default}
+DIRS=${COORD_CONFIG_DIRS:-$START_DIR}
+SETTINGS=${COORD_SETTINGS:-$HOME/.claude/direct-settings.json}
+DENY=${COORD_DENY:-}
+# Only the config dirs above count: drop a we / will config dir inherited from the shell (claude-as sets it).
 unset CLAUDE_CONFIG_DIR
+
+# in_dir <config dir|default> command…: run with that CLAUDE_CONFIG_DIR, in a subshell so it does not stick.
+in_dir() {
+  ( d=$1; shift; [ "$d" = default ] || export CLAUDE_CONFIG_DIR="$d"; "$@" )
+}
+# Where a config dir keeps its files: the default sign-in uses ~/.claude.
+files_of() { if [ "$1" = default ]; then echo "$HOME/.claude"; else echo "$1"; fi; }
 
 # In tmux, go through tmux-kgp like the zsh `claude` function, so images still show.
 run_claude() {
@@ -27,10 +48,11 @@ run_claude() {
   fi
 }
 
-# Print the id of the newest live session named $NAME. 0 found, 1 none, 2 the session list could not be read.
-# Attach goes by id: stopped sessions keep the name, so `claude attach <name>` stops matching after a restart.
-live_id() {
-  claude agents --json 2>/dev/null | python3 -c '
+# Print the id of the newest live session named $NAME in config dir $1. 0 found, 1 none, 2 the session list
+# could not be read, 3 it is open interactively in another terminal. Attach goes by id: stopped sessions keep
+# the name, so `claude attach <name>` stops matching after a restart.
+live_id_in() {
+  in_dir "$1" claude agents --json 2>/dev/null | python3 -c '
 import json, sys
 try:
     rows = json.load(sys.stdin)
@@ -46,18 +68,57 @@ if r.get("kind") == "interactive":
 print(r.get("id") or r["sessionId"][:8])' "$NAME"
 }
 
+# The config dir whose jobs/ holds background session $1 (the start dir when none does).
+dir_of() {
+  # `claude stop` leaves a stopped jobs/<id> in the dir it moved out of: a copy that is not stopped wins.
+  found=""
+  for d in $DIRS; do
+    f="$(files_of "$d")/jobs/$1/state.json"
+    [ -f "$f" ] || continue
+    grep -qE '"state": *"(stopped|done|failed)"' "$f" || { echo "$d"; return; }
+    [ -n "$found" ] || found=$d
+  done
+  echo "${found:-$START_DIR}"
+}
+
+# Look in every config dir the session can run in. Exit codes as live_id_in.
+live_id() {
+  worst=1
+  for d in $DIRS; do
+    id=$(live_id_in "$d"); r=$?
+    [ $r = 0 ] && { echo "$id"; return 0; }
+    [ $r = 3 ] && return 3
+    [ $r = 2 ] && worst=2
+  done
+  return $worst
+}
+
+# The start flags, one per line (none of them contain a newline).
+start_args() {
+  echo --bg
+  [ -f "$SETTINGS" ] && printf '%s\n' --settings "$SETTINGS"
+  printf '%s\n' --model opus --effort high --permission-mode auto
+  [ "${COORD_RC:-}" = 1 ] && printf '%s\n' --rc "$NAME"
+  printf '%s\n' -n "$NAME"
+  [ -n "$DENY" ] && printf '%s\n' "--disallowedTools=$DENY"
+  return 0
+}
+
 start() {
-  run_claude --bg --settings "$HOME/.claude/direct-settings.json" --model opus --effort high \
-    --permission-mode auto -n "$NAME" "$FIRST"
+  set --; while IFS= read -r a; do set -- "$@" "$a"; done <<EOF
+$(start_args)
+EOF
+  in_dir "$START_DIR" run_claude "$@" -- "$FIRST"
 }
 
 case "${1:-}" in
   --print)
-    echo "cd $TRAIN && claude --bg --settings ~/.claude/direct-settings.json --model opus --effort high --permission-mode auto -n $NAME '<first prompt>' && claude attach <id>"
+    pre=""; [ "$START_DIR" = default ] || pre="CLAUDE_CONFIG_DIR=$START_DIR "
+    echo "cd $TRAIN && ${pre}claude $(start_args | tr '\n' ' ')-- '<first prompt>' && ${pre}claude attach <id>"
     exit 0 ;;
   status)
     id=$(live_id); r=$?
-    case $r in 0) echo "$NAME is running ($id)" ;; 1) echo "$NAME is not running" ;; 2) echo "could not read the session list (claude agents --json)" >&2 ;; esac
+    case $r in 0) echo "$NAME is running ($id, in $(dir_of "$id"))" ;; 1) echo "$NAME is not running" ;; 2) echo "could not read the session list (claude agents --json)" >&2 ;; esac
     exit $r ;;
   "") ;;
   *) echo "usage: coordinator [status | --print]" >&2; exit 2 ;;
@@ -74,9 +135,9 @@ if [ $r = 1 ]; then
   cd "$TRAIN" || exit 1
   start || { echo "coordinator: the background start failed" >&2; exit 1; }
   for _ in 1 2 3 4 5; do
-    id=$(live_id) && break
+    id=$(live_id_in "$START_DIR") && break
     sleep 1
   done
   [ -n "$id" ] || { echo "coordinator: started, but $NAME is not in the session list; try claude agents" >&2; exit 1; }
 fi
-run_claude attach "$id"
+in_dir "$(dir_of "$id")" run_claude attach "$id"
