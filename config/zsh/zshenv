@@ -15,7 +15,7 @@ fi
 for d in /nix/var/nix/profiles/default/bin "$HOME/.nix-profile/bin"; do
   [ -d "$d" ] && path=("$d" $path)
 done
-# 没有 Nix、也没有 sudo 的 Linux 机器（legion）上自己编译的 tmux 装在这里，排在最前面盖过 apt 的老版本。
+# 没有 Nix、也没有 sudo 的 Linux 机器上自己编译的 tmux 装在这里，排在最前面盖过 apt 的老版本。
 # 不放 ~/.local/bin：那里的 tmux 是放状态栏脚本的目录
 [ -d "$HOME/.local/opt/tmux/bin" ] && path=("$HOME/.local/opt/tmux/bin" $path)
 # mosh-server 必须有 UTF-8 locale，客户端没带 LANG 过来时给个默认值
@@ -26,7 +26,7 @@ fi
 # NETWORK_TMOUT：12 小时没联系自动退出（原来一周）。断掉的连接靠它清，不再在新登录时发 SIGUSR1：
 # 后台的 iPad / iPhone 不发包，60 秒就会被当成断了（2026-10-11，见 bin/tmux/attach.sh）。
 # SIGNAL_TMOUT：收到 SIGUSR1 时，60 秒内有联系的不杀，于是 `pkill -USR1 -x mosh-server` 只清闲置的、
-# 保住正在用的那条（homeboard 的会话卡清"无 tmux 客户端"的 mosh 时用它）。
+# 保住正在用的那条（清理"无 tmux 客户端"的 mosh 时用它）。
 # 只对之后新启动的 mosh-server 生效。
 export MOSH_SERVER_NETWORK_TMOUT=43200
 export MOSH_SERVER_SIGNAL_TMOUT=60

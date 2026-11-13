@@ -24,4 +24,4 @@ if [ "$OS" = macos ]; then
     info "本机机型 $model 不在刘海名单里：sshx / moshx 照常连，状态栏不让刘海；带刘海的话在 config/tmux/notch-models 加一行"
   fi
 fi
-info "主机别名和密钥在 ~/.ssh/config、~/.ssh/ 里，不在 dotfiles 里，要自己搬过来；然后 sshx studio coord"
+info "主机别名和密钥在 ~/.ssh/config、~/.ssh/ 里，不在 dotfiles 里，要自己搬过来；然后 sshx <主机> <会话>"

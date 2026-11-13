@@ -1,16 +1,20 @@
 #!/bin/sh
-# coordinator: open Zool's coordinator session (hermes-db), starting it when none is running.
-# It runs on the default sign-in, not through `we` / `will`: claude-quota-watch follows the session named
-# hermes-db and moves it between the two Claude accounts by switching that sign-in (reel docs/coordinator.md,
-# Who does what). Rules are read from the train worktree, so it starts there.
+# coordinator: open a long-running coordinator Claude Code session by name, starting it in the background
+# when none is running. It runs on the default sign-in, not through `we` / `will`, so a quota watcher can
+# move it between accounts by switching that sign-in.
+# Which session, where it starts and its first prompt are machine-specific and stay out of the repo:
+# ~/.config/coordinator/config sets COORD_NAME, COORD_DIR and COORD_PROMPT (shell syntax).
 #   coordinator           attach to the running one; else start it in the background, then attach
 #   coordinator status    say whether it is running
 #   coordinator --print   print the start command and do nothing
-NAME=hermes-db
+CONF="$HOME/.config/coordinator/config"
+[ -r "$CONF" ] || { echo "coordinator: $CONF is missing (COORD_NAME, COORD_DIR, COORD_PROMPT)" >&2; exit 2; }
+. "$CONF"
+NAME=${COORD_NAME:?coordinator: COORD_NAME is not set in $CONF}
+TRAIN=${COORD_DIR:?coordinator: COORD_DIR is not set in $CONF}
+FIRST=${COORD_PROMPT:-}
 # Default sign-in: drop a we / will config dir inherited from the shell (claude-as sets it).
 unset CLAUDE_CONFIG_DIR
-TRAIN="$HOME/projects/reel-macparity"
-FIRST="You are Zool's coordinator (session hermes-db). Follow docs/coordinator.md's After compaction section: read the newest ~/projects/reel/.agents/handoff-*.md if one is newer than your start, check the ledger summary and .agents/coord-inbox.tsv, arm the Monitor on the inbox, then tell me what is open."
 
 # In tmux, go through tmux-kgp like the zsh `claude` function, so images still show.
 run_claude() {
@@ -24,7 +28,7 @@ run_claude() {
 }
 
 # Print the id of the newest live session named $NAME. 0 found, 1 none, 2 the session list could not be read.
-# Attach goes by id: stopped sessions keep the name, so `claude attach hermes-db` stops matching after a restart.
+# Attach goes by id: stopped sessions keep the name, so `claude attach <name>` stops matching after a restart.
 live_id() {
   claude agents --json 2>/dev/null | python3 -c '
 import json, sys

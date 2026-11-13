@@ -27,7 +27,7 @@ The menu groups the modules; the group and its order come from `group:` in each 
 | | `brew-extras` | `brew bundle` of `config/brew/Brewfile`: the everyday tools outside `terminal` (gh, jq, uv, node, xcodegen, codex…); never upgrades what is installed | | ✓ |
 | Claude Code | `claude-core` | `~/.claude/CLAUDE.md` → `config/claude/CLAUDE.md`, the instructions every machine shares; it imports `~/.claude/CLAUDE.machine.md` for what is true only here (an existing CLAUDE.md is moved there). Merges `config/claude/settings.base.json` (no attribution, theme…) into `settings.json` | ✓ | ✓ |
 | | `claude-accounts` | `we` and `will` start Claude Code on two Claude accounts (team / personal), connected directly; memory, CLAUDE.md, hooks, settings and transcripts stay shared, so `will --resume <id>` picks up a `we` session | ✓ | ✓ |
-| | `claude-statusline` | Claude Code status line — adapts to pane width, with actual model/account and numeric 5h/weekly usage; supports Magpie routing. From [claude-status-bar](https://github.com/williamliu0516/claude-status-bar) | ✓ | ✓ |
+| | `claude-statusline` | Claude Code status line — adapts to pane width, with actual model/account and numeric 5h/weekly usage; supports gateway routing. From [claude-status-bar](https://github.com/williamliu0516/claude-status-bar) | ✓ | ✓ |
 | | `claude-tmux` | tmux window numbers coloured by Claude Code state; Claude panes reopen their conversation after a restore (needs `terminal`) | ✓ | ✓ |
 | | `claude-push` | Phone / iPad push via [ntfy](https://ntfy.sh) whenever Claude stops or waits for approval | ✓ | ✓ |
 | | `claude-img` | Images Claude reads or screenshots appear right in the transcript, as in the mobile app, also inside tmux; needs Ghostty or kitty (needs `terminal`) | ✓ | ✓ |
@@ -178,7 +178,7 @@ index.html           the page at xiaweiliu.com/dotfiles
 
 To add a module, create `modules/<id>/install.sh` with the header comments; the menu picks it up. Give it a `group:` and add the id to `ORDER` in `install.sh` to place it inside that group; unlisted modules go last.
 
-Personal and machine-only settings stay out of the repo (the repo is public): `~/.config/zsh/local.zsh`, `~/.config/tmux/local.tmux`, `~/.ssh/config.local`, `~/.gitconfig`, `~/.claude/CLAUDE.machine.md`.
+Personal and machine-only settings stay out of the repo (the repo is public): `~/.config/zsh/local.zsh`, `~/.config/tmux/local.tmux`, `~/.ssh/config.local`, `~/.gitconfig`, `~/.claude/CLAUDE.machine.md`, `~/.config/coordinator/config`.
 
 Everything is symlinked from `~/.dotfiles`, so edits in the repo are live. Existing files are backed up as `<name>.bak.<timestamp>` before being replaced.
 

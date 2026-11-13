@@ -1,6 +1,6 @@
 #!/bin/sh
 # we / will: start Claude Code on one Claude account, connected directly (not through a
-# gateway such as magpie). Linked as `we` (team account) and `will` (personal account) in
+# gateway). Linked as `we` (team account) and `will` (personal account) in
 # ~/.local/bin by modules/claude-accounts.
 # Each account keeps its own config dir (its login, .claude.json, plugins, synced skills); the
 # items in SHARED point back at ~/.claude, so memory, CLAUDE.md, hooks, settings and transcripts
@@ -26,7 +26,7 @@ done
 export CLAUDE_CONFIG_DIR="$dir"
 
 direct="$HOME/.claude/direct-settings.json"
-# `we --peer ...`: a Zool peer session. ~/.claude/peer-settings.json switches off what peers do
+# `we --peer ...`: a peer session. ~/.claude/peer-settings.json switches off what peers do
 # not use (claude.ai connectors, Workflow, org-synced skills, feedback tools). Claude Code keeps
 # only the last --settings it is given, so the two files are merged here into one JSON string.
 if [ "${1:-}" = "--peer" ]; then

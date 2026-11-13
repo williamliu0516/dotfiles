@@ -29,14 +29,14 @@ def iso(t):
     return datetime.fromtimestamp(int(t), timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
-def sim(udid=U1, name="reel upgrade check", booted_ago=60):
+def sim(udid=U1, name="app upgrade check", booted_ago=60):
     return {"udid": udid, "name": name, "state": "Booted", "lastUsedAt": iso(NOW - booted_ago)}
 
 
 # 两个 Claude Code：A（pid 100）、B（pid 200），各自一个 zsh
 BASE = {
     1: (0, "boot", "/sbin/launchd"),
-    99: (1, "w", "/Users/hermes/.local/share/claude-img/claude"),
+    99: (1, "w", "/Users/me/.local/share/claude-img/claude"),
     100: (99, "A", "claude"),
     101: (100, "a", "/bin/zsh -c eval 'sleep 600'"),
     200: (1, "B", "claude --resume x"),
@@ -79,7 +79,7 @@ class T(unittest.TestCase):
         self.assertIsNone(self.owner()["pid"])
 
     def test_foreground_boot_by_name(self):
-        self.post('xcrun simctl boot "reel upgrade check"', since=NOW - 90)
+        self.post('xcrun simctl boot "app upgrade check"', since=NOW - 90)
         self.assertEqual(self.owner()["pid"], 100)
 
     def test_named_but_booted_before_the_command(self):
