@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # name: Ghostty + tmux + zsh
-# desc: 终端、字体、zsh 插件、tmux 配置，全部软链到 ~/.dotfiles
+# desc: 终端、字体、zsh 插件和 tmux 配置，全部软链到 ~/.dotfiles
 # os:   linux macos
+# group: 终端
 set -euo pipefail
 . "${DOTFILES_DIR:-$HOME/.dotfiles}/lib/common.sh"
 

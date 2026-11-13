@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
-# name: Claude → tmux 窗口染色
-# desc: tmux 窗口编号随 Claude Code 状态变色（运行 / 等你批准 / 完成 / 出错）；重启后各窗格接回原来的对话
+# name: tmux 窗口染色
+# desc: 窗口编号随 Claude 状态变色（运行 / 等批准 / 完成 / 出错）；重启后接回原来的对话
 # os:   linux macos
+# group: Claude Code
 # needs: terminal
 set -euo pipefail
 . "${DOTFILES_DIR:-$HOME/.dotfiles}/lib/common.sh"

@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
-# name: sshx / moshx → 连别的机器的 tmux
-# desc: sshx 主机 [会话名] 一步 ssh 过去并接进那边的 tmux（moshx 走 mosh）；从刘海 MacBook 连过去时，只有这个连接的状态栏让出刘海
+# name: sshx / moshx
+# desc: sshx 主机 [会话]：一步 ssh 进对方的 tmux（moshx 走 mosh）；刘海 MacBook 的状态栏布局跟过去
 # os:   linux macos
+# group: 终端
 set -euo pipefail
 . "${DOTFILES_DIR:-$HOME/.dotfiles}/lib/common.sh"
 

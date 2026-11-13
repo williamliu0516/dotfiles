@@ -1,0 +1,11 @@
+# macOS 上 terminal 模块之外常用的工具（modules/brew-extras 用 brew bundle 装）。
+# 新装的东西想在每台 Mac 上都有，就加到这里。
+brew "gh"
+brew "jq"
+brew "uv"
+brew "node"
+brew "python@3.13"
+brew "gitleaks"
+brew "xcodegen"
+brew "smartmontools"
+cask "codex"

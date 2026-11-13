@@ -16,7 +16,11 @@ DOTFILES="${DOTFILES_DIR:-$HOME/.dotfiles}"
 export DOTFILES_DIR="$DOTFILES"
 
 # 模块的显示和执行顺序；不在这里的新模块排在最后
-ORDER="terminal remote-tmux claude-tmux claude-push claude-statusline keyboard-display gnome-desktop"
+# 分组标题取自各模块的 group:，组的顺序就是它第一个模块出现的顺序
+ORDER="terminal remote-tmux gnome-desktop
+       git-ssh brew-extras
+       claude-core claude-accounts claude-statusline claude-tmux claude-push claude-img claude-killguard claude-sims
+       keyboard-display"
 
 # 仓库还没拉下来之前，lib/common.sh 不可用，先用最小的一套输出函数
 bold() { printf '\033[1m%s\033[0m\n' "$*"; }
@@ -90,6 +94,7 @@ fi
 # ── 发现模块 ────────────────────────────────────────────────
 # 每个模块在 install.sh 开头用注释声明 name / desc / os / needs
 meta() { sed -n "s/^# $2: *//p" "$DOTFILES/modules/$1/install.sh" | head -1; }
+group() { local g; g=$(meta "$1" group); echo "${g:-其他}"; }
 
 supported() {  # 本机能不能装这个模块
   local tag
@@ -110,7 +115,12 @@ ALL="${ALL# }"
 [ -n "$ALL" ] || die "这台机器上没有可装的模块"
 
 if [ "$MODE" = list ]; then
-  for id in $ALL; do printf '  %-18s %s — %s\n' "$id" "$(meta "$id" name)" "$(meta "$id" desc)"; done
+  g_prev=""
+  for id in $ALL; do
+    g=$(group "$id")
+    if [ "$g" != "$g_prev" ]; then printf '\n\033[1m%s\033[0m\n' "$g"; g_prev=$g; fi
+    printf '  %-18s %s — %s\n' "$id" "$(meta "$id" name)" "$(meta "$id" desc)"
+  done
   exit 0
 fi
 
@@ -128,8 +138,12 @@ elif [ "$MODE" = only ]; then
 else
   has_tty || die "没有可交互的终端。用 --all 或 --only <模块,...> 指定要装什么"
   N=$(echo $ALL | wc -w | tr -d ' ')
-  # 每个模块一个勾选位，1 = 选中；默认全选
-  CHECK=""; for id in $ALL; do CHECK="${CHECK}1"; done
+  # 每个模块一个勾选位，1 = 选中；默认全选，模块头写了 default: off 的不勾（要额外硬件、会提问的）
+  CHECK=""; for id in $ALL; do
+    if [ "$(meta "$id" default)" = off ]; then CHECK="${CHECK}0"; else CHECK="${CHECK}1"; fi
+  done
+  # 每画一屏都调 sed 读模块头太慢，先读进普通数组（bash 3.2 支持下标数组）
+  i=1; for id in $ALL; do M_NAME[$i]=$(meta "$id" name); M_GROUP[$i]=$(group "$id"); i=$((i + 1)); done
   CUR=1
 
   nth()    { echo $ALL | tr ' ' '\n' | sed -n "${1}p"; }   # 第 n 个模块名
@@ -144,11 +158,15 @@ else
     {
       printf '\033[H\033[J'
       printf '\n  \033[1m选择要安装的内容\033[0m  \033[2m(%s)\033[0m\n\n' "$( [ "$OS" = macos ] && echo macOS || echo "$PRETTY" )"
-      i=1
+      i=1; local g_prev=""
       for id in $ALL; do
+        if [ "${M_GROUP[$i]}" != "$g_prev" ]; then
+          [ -z "$g_prev" ] || printf '\n'
+          printf '  \033[38;5;111m%s\033[0m\n' "${M_GROUP[$i]}"; g_prev=${M_GROUP[$i]}
+        fi
         [ "$(bit $i)" = 1 ] && mark='\033[38;5;77m◉\033[0m' || mark='\033[2m○\033[0m'
         if [ $i -eq $CUR ]; then ptr='\033[38;5;111m❯\033[0m'; else ptr=' '; fi
-        printf "  $ptr $mark  %s\n" "$(meta "$id" name)"
+        printf "  $ptr $mark  %s\n" "${M_NAME[$i]}"
         i=$((i + 1))
       done
       printf '\n  \033[2m%s\033[0m\n' "$(meta "$(nth $CUR)" desc)"
@@ -200,7 +218,7 @@ if [ -n "${DOTFILES_DRY_RUN:-}" ]; then echo "会执行：$RUN"; exit 0; fi
 DONE="" FAILED=""
 for id in $RUN; do
   echo
-  bold "━━ $(meta "$id" name)"
+  bold "━━ $(group "$id") · $(meta "$id" name)"
   if bash "$DOTFILES/modules/$id/install.sh"; then DONE="$DONE $id"
   else FAILED="$FAILED $id"; warn "$(meta "$id" name) 出错，继续装下一个"; fi
 done

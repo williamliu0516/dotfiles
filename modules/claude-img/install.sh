@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
-# name: Claude → 对话里看图
-# desc: Claude 读到、截到的图直接画在对话里（Ghostty / kitty，tmux 里也行），和手机 App 一样
+# name: 对话里看图
+# desc: 读到、截到的图直接画在对话里（Ghostty / kitty，tmux 里也行）
 # os:   linux macos
+# group: Claude Code
 # needs: terminal
 set -euo pipefail
 . "${DOTFILES_DIR:-$HOME/.dotfiles}/lib/common.sh"

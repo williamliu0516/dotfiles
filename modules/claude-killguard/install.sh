@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
-# name: Claude → 杀进程前先检查
-# desc: Claude Code 跑 pkill / killall / kill 之前先列出会杀掉哪些进程；选项写在 pattern 后面、会杀到别的会话或系统进程就拒绝
+# name: 杀进程前检查
+# desc: pkill / killall / kill 之前先列出会杀到哪些进程，写错或会误杀的拒绝
 # os:   macos
+# group: Claude Code
 set -euo pipefail
 . "${DOTFILES_DIR:-$HOME/.dotfiles}/lib/common.sh"
 

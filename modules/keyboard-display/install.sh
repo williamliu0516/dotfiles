@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
 # name: Claude 键盘屏幕
-# desc: 在机械键盘的 142×428 屏幕上显示 Claude Code 会话状态（切换快捷键仅 macOS）
+# desc: 机械键盘的 142×428 屏幕显示 Claude 会话状态；会问屏幕的 IP（切换快捷键仅 macOS）
 # os:   linux macos
+# group: 硬件（默认不装）
+# default: off
 set -euo pipefail
 . "${DOTFILES_DIR:-$HOME/.dotfiles}/lib/common.sh"
 

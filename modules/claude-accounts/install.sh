@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
-# name: Claude → 两个账号 we / will
-# desc: we 用团队账号、will 用个人账号直连启动 Claude Code；记忆、CLAUDE.md、hook、设置和会话记录两边共用
+# name: 两个账号 we / will
+# desc: we 团队账号、will 个人账号直连；记忆、CLAUDE.md、hook、设置和会话记录两边共用
 # os:   linux macos
+# group: Claude Code
 set -euo pipefail
 . "${DOTFILES_DIR:-$HOME/.dotfiles}/lib/common.sh"
 

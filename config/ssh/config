@@ -1,0 +1,9 @@
+# 共用的 ssh 设置，软链到 ~/.ssh/config（modules/git-ssh）。密钥和自己机器的主机别名都不进仓库：
+# 写在 ~/.ssh/config.local，它在最前面 Include，同一项以它为准。
+Include ~/.ssh/config.local
+
+Host github.com
+  HostName github.com
+  User git
+  IdentityFile ~/.ssh/id_ed25519_github
+  IdentitiesOnly yes

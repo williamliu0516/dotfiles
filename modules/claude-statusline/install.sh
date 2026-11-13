@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
-# name: Claude 状态栏
-# desc: Claude Code 底部状态栏：目录、分支、模型、5 小时和每周用量（claude-status-bar 仓库）
+# name: 状态栏
+# desc: 底部状态栏：目录、分支、模型、5 小时和每周用量（claude-status-bar 仓库）
 # os:   linux macos
+# group: Claude Code
 set -euo pipefail
 . "${DOTFILES_DIR:-$HOME/.dotfiles}/lib/common.sh"
 

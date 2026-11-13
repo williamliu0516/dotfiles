@@ -2,6 +2,7 @@
 # name: Ubuntu 桌面美化
 # desc: Orchis 主题、Tela 图标、透明顶栏和浅色 Dock、顶栏自动隐藏并挤窄窗口、Super+Enter 下拉终端
 # os:   gnome
+# group: 终端
 set -euo pipefail
 . "${DOTFILES_DIR:-$HOME/.dotfiles}/lib/common.sh"
 

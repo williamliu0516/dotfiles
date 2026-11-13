@@ -16,19 +16,24 @@ To update a machine, run the same command again. If something has edited a file 
 
 ## Modules
 
-| id | | Linux | macOS |
-|---|---|:-:|:-:|
-| `terminal` | Ghostty + tmux + zsh, fonts, plugins | ✓ | ✓ |
-| `remote-tmux` | `sshx host [session]` / `moshx host [session]`: ssh or mosh into another machine and attach its tmux in one step; from the notched MacBook, that client's status line keeps the camera gap | ✓ | ✓ |
-| `claude-tmux` | tmux window numbers coloured by Claude Code state; Claude panes reopen their conversation after a restore (needs `terminal`) | ✓ | ✓ |
-| `claude-push` | Phone / iPad push via [ntfy](https://ntfy.sh) whenever Claude stops or waits for approval | ✓ | ✓ |
-| `claude-img` | Images Claude reads or screenshots appear right in the transcript, as in the mobile app, also inside tmux; needs Ghostty or kitty (needs `terminal`) | ✓ | ✓ |
-| `claude-accounts` | `we` and `will` start Claude Code on two Claude accounts (team / personal), connected directly; memory, CLAUDE.md, hooks, settings and transcripts stay shared, so `will --resume <id>` picks up a `we` session | ✓ | ✓ |
-| `claude-sims` | At most 3 iOS simulators booted across all Claude Code sessions; shuts them down when their session ends or after 45 min unused | | ✓ |
-| `claude-killguard` | Lists what a `pkill` / `killall` / `kill` would hit before Claude Code runs it; refuses options after the pattern, and kills that reach another session, Docker or the system until Claude has seen the list | | ✓ |
-| `claude-statusline` | Claude Code status line — adapts to pane width, with actual model/account and numeric 5h/weekly usage; supports Magpie routing. From [claude-status-bar](https://github.com/williamliu0516/claude-status-bar) | ✓ | ✓ |
-| `keyboard-display` | Claude Code sessions on a keyboard's 142×428 panel. From [context-keyboard-display](https://github.com/williamliu0516/context-keyboard-display); the hotkeys are macOS-only | ✓ | ✓ |
-| `gnome-desktop` | Orchis theme, Tela icons, lighter top bar and dock, auto-hiding top bar, Super+Enter drop-down Ghostty | GNOME | |
+The menu groups the modules; the group and its order come from `group:` in each module's header and `ORDER` in `install.sh`. Everything starts ticked except modules marked `default: off`.
+
+| group | id | | Linux | macOS |
+|---|---|---|:-:|:-:|
+| 终端 | `terminal` | Ghostty + tmux + zsh, fonts, plugins | ✓ | ✓ |
+| | `remote-tmux` | `sshx host [session]` / `moshx host [session]`: ssh or mosh into another machine and attach its tmux in one step; from the notched MacBook, that client's status line keeps the camera gap | ✓ | ✓ |
+| | `gnome-desktop` | Orchis theme, Tela icons, lighter top bar and dock, auto-hiding top bar, Super+Enter drop-down Ghostty | GNOME | |
+| 基础 | `git-ssh` | Generic git settings → `~/.config/git/config`; name and email stay in the local `~/.gitconfig`. `config/ssh/config` → `~/.ssh/config` with only the GitHub entry; it first includes `~/.ssh/config.local`, where host aliases live (an existing `~/.ssh/config` is moved there). Identity, hosts and keys never enter the repo | ✓ | ✓ |
+| | `brew-extras` | `brew bundle` of `config/brew/Brewfile`: the everyday tools outside `terminal` (gh, jq, uv, node, xcodegen, codex…); never upgrades what is installed | | ✓ |
+| Claude Code | `claude-core` | `~/.claude/CLAUDE.md` → `config/claude/CLAUDE.md`, the instructions every machine shares; it imports `~/.claude/CLAUDE.machine.md` for what is true only here (an existing CLAUDE.md is moved there). Merges `config/claude/settings.base.json` (no attribution, theme…) into `settings.json` | ✓ | ✓ |
+| | `claude-accounts` | `we` and `will` start Claude Code on two Claude accounts (team / personal), connected directly; memory, CLAUDE.md, hooks, settings and transcripts stay shared, so `will --resume <id>` picks up a `we` session | ✓ | ✓ |
+| | `claude-statusline` | Claude Code status line — adapts to pane width, with actual model/account and numeric 5h/weekly usage; supports Magpie routing. From [claude-status-bar](https://github.com/williamliu0516/claude-status-bar) | ✓ | ✓ |
+| | `claude-tmux` | tmux window numbers coloured by Claude Code state; Claude panes reopen their conversation after a restore (needs `terminal`) | ✓ | ✓ |
+| | `claude-push` | Phone / iPad push via [ntfy](https://ntfy.sh) whenever Claude stops or waits for approval | ✓ | ✓ |
+| | `claude-img` | Images Claude reads or screenshots appear right in the transcript, as in the mobile app, also inside tmux; needs Ghostty or kitty (needs `terminal`) | ✓ | ✓ |
+| | `claude-killguard` | Lists what a `pkill` / `killall` / `kill` would hit before Claude Code runs it; refuses options after the pattern, and kills that reach another session, Docker or the system until Claude has seen the list | | ✓ |
+| | `claude-sims` | At most 3 iOS simulators booted across all Claude Code sessions; shuts them down when their session ends or after 45 min unused | | ✓ |
+| 硬件 | `keyboard-display` | Claude Code sessions on a keyboard's 142×428 panel; asks for the panel's IP. From [context-keyboard-display](https://github.com/williamliu0516/context-keyboard-display); the hotkeys are macOS-only. Unticked by default | ✓ | ✓ |
 
 Skip the menu:
 
@@ -138,14 +143,17 @@ Log out and back in afterwards — GNOME on Wayland only discovers new extension
 install.sh           menu, then runs the chosen modules in order
 lib/common.sh        shared helpers (output, link, apt/brew)
 modules/<id>/install.sh
-                     one per module; the header declares name, desc, os, needs
+                     one per module; the header declares name, desc, os, group, and optionally needs, default: off
 nix/
   flake.nix  pins nixpkgs + Home Manager; flake.lock is the version lock
   home.nix   the Linux CLI tool list and the font; configs stay symlinked, not managed by Home Manager
 config/
   zsh/       zshrc, p10k.zsh, zshenv (PATH + locale for non-interactive shells: ssh commands, mosh-server)
   tmux/      tmux.conf, notch.tmux (MacBook camera-notch status layout, also sent to remote machines by sshx)
-  claude/    inline-images: Claude Code plugin that draws images in the transcript
+  claude/    CLAUDE.md (shared global instructions), settings.base.json, inline-images (plugin that draws images in the transcript)
+  git/       config, linked as ~/.config/git/config
+  ssh/       config: the GitHub entry; host aliases live in ~/.ssh/config.local, included first
+  brew/      Brewfile for brew-extras
   ghostty/   config.ghostty (shared), linux.ghostty / macos.ghostty (linked as platform.ghostty), themes/, shaders/
   gnome/     extensions.dconf — extension settings, merged with dconf load
 bin/
@@ -168,7 +176,9 @@ bin/
 index.html           the page at xiaweiliu.com/dotfiles
 ```
 
-To add a module, create `modules/<id>/install.sh` with the header comments; the menu picks it up. Add the id to `ORDER` in `install.sh` if it should sort before the others.
+To add a module, create `modules/<id>/install.sh` with the header comments; the menu picks it up. Give it a `group:` and add the id to `ORDER` in `install.sh` to place it inside that group; unlisted modules go last.
+
+Personal and machine-only settings stay out of the repo (the repo is public): `~/.config/zsh/local.zsh`, `~/.config/tmux/local.tmux`, `~/.ssh/config.local`, `~/.gitconfig`, `~/.claude/CLAUDE.machine.md`.
 
 Everything is symlinked from `~/.dotfiles`, so edits in the repo are live. Existing files are backed up as `<name>.bak.<timestamp>` before being replaced.
 

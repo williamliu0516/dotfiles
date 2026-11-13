@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
-# name: Claude → 模拟器上限
-# desc: 几个 Claude Code 会话合起来最多开 3 台 iOS 模拟器；会话结束或闲置 45 分钟就自动关掉
+# name: 模拟器上限
+# desc: 所有会话合起来最多 3 台 iOS 模拟器；会话结束或闲置 45 分钟自动关
 # os:   macos
+# group: Claude Code
 set -euo pipefail
 . "${DOTFILES_DIR:-$HOME/.dotfiles}/lib/common.sh"
 

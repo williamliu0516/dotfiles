@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
-# name: Claude → 手机推送
-# desc: Claude Code 一停下或等你批准，就用 ntfy 推到手机 / iPad
+# name: 手机推送
+# desc: 停下或等你批准时用 ntfy 推到手机 / iPad
 # os:   linux macos
+# group: Claude Code
 set -euo pipefail
 . "${DOTFILES_DIR:-$HOME/.dotfiles}/lib/common.sh"
 
