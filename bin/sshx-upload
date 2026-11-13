@@ -1,0 +1,399 @@
+#!/usr/bin/env python3
+"""sshx-upload 主机 -- CMD [ARGS]：sshx / moshx 用它跑 ssh / mosh，让本机的图片和文件能送进对面的 Claude Code。
+
+在 Ghostty 里把图片拖进 sshx 的窗口，Ghostty 粘进去的是本机路径（/Users/…），对面没有这个文件；
+Claude Code 的 Ctrl+V 读的是对面机器的剪贴板，也看不到本机的截图。这里在终端和 ssh 之间夹一个 pty，
+输出原样转发，只看键盘输入里的两样东西：
+
+1. 一次括号粘贴（\\e[200~ … \\e[201~），内容拆开后每一项都是本机存在的文件：把它们传到对面的
+   ~/Downloads/webmosh/（和 webmosh 网页终端上传用同一个目录、同样的文件名规则），粘贴换成对面的路径。
+   Claude Code 把粘进来的图片路径当成附图（[Image #1]）。不是文件的粘贴原样送过去。
+2. Ctrl+V（0x16，或 kitty 键盘协议的 \\e[118;5u）：本机剪贴板里有图片时，存成 PNG 传过去、粘贴路径；
+   没有图片时 Ctrl+V 原样送过去（vim、zsh 里照常用）。
+
+图片照 webmosh 的规则先处理（Claude 最多读长边 2576 像素、375 万像素）：HEIC 转 JPEG，超过这个尺寸
+或大于 1 MB 的缩成 JPEG；GIF 和别的文件原样传。上传走 ssh（ControlMaster 复用连接，第一次之后很快），
+在后台线程里做，期间照常打字；失败时发一条系统通知，什么都不粘。
+"""
+import errno
+import fcntl
+import os
+import re
+import select
+import shlex
+import shutil
+import signal
+import subprocess
+import sys
+import tempfile
+import termios
+import threading
+import time
+import tty
+
+PASTE_START = b"\x1b[200~"
+PASTE_END = b"\x1b[201~"
+CTRL_V = (b"\x16", b"\x1b[118;5u")
+EDGE, AREA, KEEP = 2576, 3.75e6, 1 << 20
+MAX_FILE = 50 << 20                       # webmosh 的上限
+HOLD_SECS = 0.03                          # 半截转义序列最多等这么久，单按 Esc 不会被吞
+CONTROL = ["-o", "ControlMaster=auto", "-o", "ControlPath=~/.ssh/cm-%C", "-o", "ControlPersist=10m",
+           "-o", "BatchMode=yes"]
+
+# 对面执行：在 ~/Downloads/webmosh/ 下用不冲突的名字建文件（noclobber），内容来自 stdin，打印完整路径
+REMOTE = r'''
+d="$HOME/Downloads/webmosh"; mkdir -p "$d" && chmod 700 "$d" || exit 1
+n=$1; b=${n%.*}; e=; [ "$b" != "$n" ] && e=".${n##*.}"
+set -C; umask 077; i=0
+while [ $i -lt 100 ]; do
+  if [ $i -eq 0 ]; then p="$d/$n"; else p="$d/$b-$i$e"; fi
+  if { cat > "$p"; } 2>/dev/null; then echo "$p"; exit 0; fi
+  [ -e "$p" ] || exit 1
+  i=$((i+1))
+done
+exit 1
+'''
+
+
+def notify(msg):
+    if sys.platform == "darwin":
+        subprocess.run(["osascript", "-e", f"display notification {applescript_str(msg)} with title \"sshx\""],
+                       capture_output=True)
+    elif shutil.which("notify-send"):
+        subprocess.run(["notify-send", "sshx", msg], capture_output=True)
+
+
+def applescript_str(s):
+    return '"' + s.replace("\\", "\\\\").replace('"', '\\"') + '"'
+
+
+def remote_name(name):
+    """和 webmosh relay 的 uploadName 一样：时间戳 + 只留 [A-Za-z0-9._-] 的文件名，粘进去不用加引号。"""
+    base, ext = os.path.splitext(os.path.basename(name))
+    base = re.sub(r"[^A-Za-z0-9._-]+", "-", base).strip("-.")[:60] or "file"
+    ext = re.sub(r"[^A-Za-z0-9._-]+", "", ext.lower())
+    if len(ext) > 10 or ext == ".":
+        ext = ""
+    return time.strftime("%Y%m%d-%H%M%S-") + base + ext
+
+
+def image_size(path):
+    if sys.platform != "darwin":
+        return None
+    r = subprocess.run(["sips", "-g", "pixelWidth", "-g", "pixelHeight", path], capture_output=True, text=True)
+    w = re.search(r"pixelWidth: (\d+)", r.stdout)
+    h = re.search(r"pixelHeight: (\d+)", r.stdout)
+    return (int(w.group(1)), int(h.group(1))) if w and h else None
+
+
+def prepare(path, tmpdir):
+    """要传的文件和它在对面的名字。只在 macOS 上用 sips 处理图片，别处原样传。"""
+    name = os.path.basename(path)
+    ext = os.path.splitext(name)[1].lower()
+    if ext not in (".png", ".jpg", ".jpeg", ".webp", ".heic", ".heif", ".tif", ".tiff"):
+        return path, name
+    size = image_size(path)
+    if not size:
+        return path, name
+    w, h = size
+    s = min(1.0, EDGE / max(w, h), (AREA / (w * h)) ** 0.5)
+    convert = ext in (".heic", ".heif", ".tif", ".tiff")
+    if s == 1 and not convert and os.path.getsize(path) <= KEEP:
+        return path, name
+    out = os.path.join(tmpdir, os.path.splitext(name)[0] + ".jpg")
+    cmd = ["sips", "-s", "format", "jpeg", "-s", "formatOptions", "90"]
+    if s < 1:
+        cmd += ["-z", str(round(h * s)), str(round(w * s))]
+    if subprocess.run(cmd + [path, "--out", out], capture_output=True).returncode != 0 or not os.path.exists(out):
+        return path, name
+    if s == 1 and not convert and os.path.getsize(out) >= os.path.getsize(path):
+        return path, name
+    return out, os.path.basename(out)
+
+
+def upload(host, path, tmpdir):
+    src, name = prepare(path, tmpdir)
+    if os.path.getsize(src) > MAX_FILE:
+        raise RuntimeError(f"{os.path.basename(path)} 超过 50 MB")
+    with open(src, "rb") as f:
+        r = subprocess.run(["ssh", *CONTROL, host, "sh -c " + shlex.quote(REMOTE) + " sh " + remote_name(name)],
+                           stdin=f, capture_output=True, text=True, timeout=120)
+    p = r.stdout.strip().splitlines()[-1:] or [""]
+    if r.returncode != 0 or not p[0].startswith("/"):
+        raise RuntimeError((r.stderr.strip() or f"ssh 退出码 {r.returncode}").splitlines()[-1])
+    return p[0]
+
+
+def clipboard_image(tmpdir):
+    """本机剪贴板里的图片存成 PNG，返回路径；没有图片返回 None。"""
+    out = os.path.join(tmpdir, "clipboard.png")
+    if sys.platform == "darwin":
+        info = subprocess.run(["osascript", "-e", "clipboard info"], capture_output=True, text=True).stdout
+        if "PNGf" not in info and "TIFF" not in info:
+            return None
+        script = (f'set f to open for access POSIX file {applescript_str(out)} with write permission\n'
+                  'set eof f to 0\n'
+                  'try\n write (the clipboard as «class PNGf») to f\n'
+                  'on error\n close access f\n error "no png"\nend try\nclose access f')
+        if subprocess.run(["osascript", "-e", script], capture_output=True).returncode != 0:
+            return None
+    else:
+        if shutil.which("wl-paste") and os.environ.get("WAYLAND_DISPLAY"):
+            cmd = ["wl-paste", "-t", "image/png"]
+        elif shutil.which("xclip") and os.environ.get("DISPLAY"):
+            cmd = ["xclip", "-selection", "clipboard", "-t", "image/png", "-o"]
+        else:
+            return None
+        with open(out, "wb") as f:
+            if subprocess.run(cmd, stdout=f, stderr=subprocess.DEVNULL).returncode != 0:
+                return None
+    return out if os.path.getsize(out) > 0 else None
+
+
+def local_files(text):
+    """粘贴内容拆成路径（Ghostty 拖文件时用反斜杠转义空格），全是本机存在的文件时返回列表，否则 None。"""
+    text = text.strip()
+    if not text or "\n" in text or len(text) > 8192:
+        return None
+    try:
+        parts = shlex.split(text)
+    except ValueError:
+        return None
+    paths = []
+    for p in parts:
+        p = os.path.expanduser(p)
+        if p.startswith("file://"):
+            from urllib.parse import unquote
+            p = unquote(p[7:])
+        if not os.path.isabs(p) or not os.path.isfile(p):
+            return None
+        paths.append(p)
+    return paths or None
+
+
+def winsize(fd):
+    try:
+        return fcntl.ioctl(fd, termios.TIOCGWINSZ, b"\0" * 8)
+    except OSError:
+        return None
+
+
+def write_all(fd, data):
+    while data:
+        try:
+            n = os.write(fd, data)
+        except InterruptedError:
+            continue
+        except BlockingIOError:
+            select.select([], [fd], [])
+            continue
+        data = data[n:]
+
+
+def partial_prefix(buf):
+    """buf 末尾是不是某个要认的序列的开头（要等下一块输入再判断）。"""
+    for seq in (PASTE_START, CTRL_V[1]):
+        for k in range(min(len(seq) - 1, len(buf)), 0, -1):
+            if buf.endswith(seq[:k]):
+                return k
+    return 0
+
+
+def main():
+    argv = sys.argv[1:]
+    if len(argv) < 3 or argv[1] != "--":
+        sys.exit(__doc__.strip())
+    host, cmd = argv[0], argv[2:]
+    if not os.isatty(0) or not os.isatty(1):
+        os.execvp(cmd[0], cmd)
+
+    tmpdir = tempfile.mkdtemp(prefix="sshx-upload.")
+    pid, master = os.forkpty()
+    if pid == 0:
+        try:
+            os.execvp(cmd[0], cmd)
+        except OSError as e:
+            os.write(2, f"sshx-upload: {cmd[0]}: {e.strerror}\n".encode())
+            os._exit(127)
+    size = winsize(0)
+    if size:
+        fcntl.ioctl(master, termios.TIOCSWINSZ, size)
+
+    wake_r, wake_w = os.pipe()
+    for fd in (wake_r, wake_w):
+        fcntl.fcntl(fd, fcntl.F_SETFL, os.O_NONBLOCK)
+    got = set()
+    lock = threading.Lock()
+    ready_pastes = []                      # 上传完、等着送进 ssh 的字节
+
+    def wake():
+        try:
+            os.write(wake_w, b"x")
+        except OSError:
+            pass
+
+    def on_signal(n, _f):
+        got.add(n)
+        wake()
+
+    for sig in (signal.SIGWINCH, signal.SIGCHLD, signal.SIGTERM, signal.SIGHUP):
+        signal.signal(sig, on_signal)
+
+    def start_upload(paths, fallback):
+        """后台上传；成功后把对面路径逐个作为括号粘贴送进去（webmosh 也是一个路径一次粘贴）。"""
+        def run():
+            try:
+                remote = [upload(host, p, tmpdir) for p in paths]
+                data = b" ".join(PASTE_START + r.encode() + PASTE_END for r in remote)
+            except Exception as e:  # noqa: BLE001
+                notify(f"上传到 {host} 失败：{e}")
+                data = fallback
+            with lock:
+                ready_pastes.append(data)
+            wake()
+        threading.Thread(target=run, daemon=True).start()
+
+    def handle_paste(raw):
+        """raw 是完整的一次括号粘贴。返回现在就要送进 ssh 的字节。"""
+        paths = local_files(raw[len(PASTE_START):-len(PASTE_END)].decode("utf-8", "replace"))
+        if not paths:
+            return raw
+        start_upload(paths, raw)
+        return b""
+
+    def handle_ctrl_v(raw):
+        img = clipboard_image(tmpdir)
+        if not img:
+            return raw
+        # 每次存成新名字：上传在后台，下一次 Ctrl+V 不能把还没传的文件覆盖掉
+        dst = os.path.join(tmpdir, f"Screenshot-{time.strftime('%H%M%S')}-{os.urandom(2).hex()}.png")
+        os.replace(img, dst)
+        start_upload([dst], raw)
+        return b""
+
+    saved = termios.tcgetattr(0)
+    tty.setraw(0)
+    buf = b""                              # 还没决定怎么处理的输入
+    held_since = None
+    status = None
+    try:
+        while status is None:
+            timeout = None
+            if buf:
+                timeout = max(0.0, HOLD_SECS - (time.monotonic() - held_since)) if not buf.startswith(PASTE_START) else 1.0
+            try:
+                ready, _, _ = select.select([0, master, wake_r], [], [], timeout)
+            except InterruptedError:
+                continue
+            if wake_r in ready:
+                try:
+                    os.read(wake_r, 1024)
+                except OSError:
+                    pass
+                sigs = set()
+                while got:
+                    sigs.add(got.pop())
+                if signal.SIGWINCH in sigs:
+                    s = winsize(0)
+                    if s:
+                        try:
+                            fcntl.ioctl(master, termios.TIOCSWINSZ, s)
+                        except OSError:
+                            pass
+                if sigs & {signal.SIGTERM, signal.SIGHUP}:
+                    os.kill(pid, signal.SIGHUP)
+                if signal.SIGCHLD in sigs:
+                    done, st = os.waitpid(pid, os.WNOHANG)
+                    if done:
+                        status = st
+                with lock:
+                    pend, ready_pastes[:] = list(ready_pastes), []
+                for p in pend:
+                    write_all(master, p)
+            if master in ready:
+                try:
+                    data = os.read(master, 65536)
+                except OSError as e:
+                    if e.errno != errno.EIO:
+                        raise
+                    data = b""
+                if data:
+                    write_all(1, data)
+                elif status is None:
+                    _, status = os.waitpid(pid, 0)
+            if 0 in ready and status is None:
+                data = os.read(0, 65536)
+                if not data:
+                    os.kill(pid, signal.SIGHUP)
+                    _, status = os.waitpid(pid, 0)
+                    break
+                if not buf:
+                    held_since = time.monotonic()
+                buf += data
+            elif buf and not ready:
+                # 等够了：半截序列不会再来了（单按 Esc 等），或者粘贴迟迟没结束
+                if buf.startswith(PASTE_START) and time.monotonic() - held_since < 5:
+                    continue
+                write_all(master, buf)
+                buf = b""
+                continue
+
+            # 把 buf 里能决定的部分处理掉
+            out = b""
+            while buf:
+                if buf.startswith(PASTE_START):
+                    end = buf.find(PASTE_END)
+                    if end < 0:
+                        if len(buf) > 1 << 20:           # 很大的文字粘贴：不是文件，直接放行
+                            out += buf
+                            buf = b""
+                        break
+                    end += len(PASTE_END)
+                    out += handle_paste(buf[:end])
+                    buf = buf[end:]
+                    continue
+                hit = None
+                for seq in (PASTE_START,) + CTRL_V:
+                    i = buf.find(seq)
+                    if i >= 0 and (hit is None or i < hit[0]):
+                        hit = (i, seq)
+                if hit and hit[0] > 0:
+                    out += buf[:hit[0]]
+                    buf = buf[hit[0]:]
+                    continue
+                if hit and hit[1] != PASTE_START:
+                    out += handle_ctrl_v(hit[1])
+                    buf = buf[len(hit[1]):]
+                    continue
+                k = partial_prefix(buf)
+                out += buf[:len(buf) - k]
+                buf = buf[len(buf) - k:]
+                if buf:
+                    held_since = time.monotonic()
+                break
+            if out:
+                write_all(master, out)
+        # 子进程退出后 pty 里可能还剩一点输出
+        while True:
+            r, _, _ = select.select([master], [], [], 0)
+            if not r:
+                break
+            try:
+                data = os.read(master, 65536)
+            except OSError:
+                break
+            if not data:
+                break
+            write_all(1, data)
+    finally:
+        try:
+            termios.tcsetattr(0, termios.TCSADRAIN, saved)
+        except termios.error:
+            pass
+        shutil.rmtree(tmpdir, ignore_errors=True)
+    code = os.waitstatus_to_exitcode(status) if status is not None else 1
+    sys.exit(code if code >= 0 else 128 - code)
+
+
+if __name__ == "__main__":
+    main()

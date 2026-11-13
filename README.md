@@ -76,6 +76,8 @@ On a notched MacBook listed in `config/tmux/notch-models` (one line per model id
 
 To keep the gap when connecting from the MacBook straight to another machine's tmux, install the `remote-tmux` module and use `sshx host [session]` or `moshx host [session]` instead of `ssh` / `mosh`. They copy `notch.tmux` to the remote `~/.cache/tmux-notch.tmux`, load it after attaching, and register that tmux client's pid in `@notch-clients`, so only the MacBook's client gets the gap; the remote machine's own screen and other devices are unaffected. The remote does not need these dotfiles, but its tmux must support `#{R:}` (3.8 does, 3.4 does not; older versions keep the regular layout). If the remote lacks Ghostty's terminfo, the wrapper falls back to `TERM=xterm-256color`. Without a session name they attach to the most recent session or start one; elsewhere, or inside local tmux, they just connect and attach.
 
+Pictures and files reach a remote Claude Code the way they do in [webmosh](https://github.com/williamliu0516/webmosh). `sshx` / `moshx` run ssh or mosh under `bin/sshx-upload`, a small pty in between that watches only the keyboard input. A bracketed paste made only of local file paths (what Ghostty types when a file is dropped on the window) is uploaded over ssh to the remote `~/Downloads/webmosh/`, the same folder and naming as webmosh uploads, and the remote paths are pasted instead, which Claude Code attaches as images. Ctrl+V with a picture on the local clipboard does the same with that picture; without one, Ctrl+V goes through unchanged. Like webmosh, HEIC becomes JPEG and pictures over 2576 px, 3.75 megapixels or 1 MB shrink to a JPEG of that size. Uploads share one ssh connection (`ControlMaster`, socket `~/.ssh/cm-%C`, kept 10 minutes) and need key login; a failed upload posts a notification and pastes the original text.
+
 ### tmux
 
 You only need one key: **`Alt+m`** opens a menu with every action labelled; pressing it again closes the menu. **`Ctrl+b` `?`**, or **`Alt+/`** anywhere in the shell (inside tmux or not), shows a cheatsheet covering the shell keys, the tmux keys and what happens automatically; the tmux part is generated from the config itself, so it can't drift out of date.
@@ -166,6 +168,7 @@ bin/
   theme-preview         preview any Ghostty theme in the terminal, ranked by contrast
   ghostty-refullscreen  macOS: re-enter fullscreen for a Ghostty window opened from a fullscreen one, so it covers the menu bar strip
   sshx / moshx          ssh / mosh into another machine's tmux, carrying the MacBook notch layout for that client only
+  sshx-upload           pty under sshx / moshx: dropped files and clipboard pictures go to the remote, their remote paths are pasted
   tmux/cheatsheet.sh    the Ctrl+b ? popup
   tmux/claude-state.sh  Claude Code hook → tmux window colour, and the pane's session ID
   tmux/claude-resume.sh resurrect hooks: save each pane's Claude session, resume it after a restore

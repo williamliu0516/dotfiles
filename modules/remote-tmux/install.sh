@@ -11,7 +11,7 @@ info "安装 mosh"
 pkg_install mosh
 
 mkdir -p "$HOME/.local/bin"
-chmod +x "$DOTFILES/bin/sshx"
+chmod +x "$DOTFILES/bin/sshx" "$DOTFILES/bin/sshx-upload"
 link "$DOTFILES/bin/sshx"  "$HOME/.local/bin/sshx"
 link "$DOTFILES/bin/moshx" "$HOME/.local/bin/moshx"
 
