@@ -8,6 +8,10 @@
   agents.sh list              总览的行（pick 和 fzf 里 Ctrl-R 刷新用，调试时也能直接看）
   agents.sh preview <pane>    fzf 下方的预览：那个窗格当前的屏幕
 
+Alt+g 的第一行总是协调者（bin/coordinator 开的那个，名字是 ~/.config/coordinator/config 的 COORD_NAME），
+打开就直接回车回去。它是 `claude attach` 接上的后台会话，前台进程看着像 shell、窗格上也没有 @claude-session，
+所以 agents() 认不出它，另找：窗格标题是这个名字、那个终端上跑着 coordinator。
+
 状态由 claude-state.sh 写：窗格上的 @agent-pane-state / @agent-pane-at（每个 hook 事件都记）。
 这两个是后加的，之前就开着的 Claude 在它的下一个事件之前只有窗口上的 @agent-state，这时用窗口的。
 <client> 是按键那个客户端（#{client_name}）：Mac 和 iPad 同时连着时，只切按键的那一边。
@@ -36,7 +40,9 @@ SELF = os.path.realpath(__file__)
 
 FIELDS = ['pane_id', 'session_name', 'window_index', 'pane_index', 'window_panes',
           '@agent-pane-state', '@agent-state', '@agent-pane-at', '@claude-session',
-          'pane_current_command', 'pane_current_path', 'pane_title', 'host']
+          'pane_current_command', 'pane_current_path', 'pane_title', 'host', 'pane_tty']
+COORD_CONF = os.path.expanduser('~/.config/coordinator/config')
+COORD = (-1, '协调', '\x1b[1;35m')
 
 
 def tmux(*args):
@@ -53,19 +59,49 @@ def agents():
     out = tmux('list-panes', '-a', '-F', '\t'.join('#{%s}' % f for f in FIELDS))
     rows = []
     for line in out.splitlines():
-        p = dict(zip(FIELDS, line.split('\t')))
-        if len(p) < len(FIELDS):
+        p = parse(line)
+        if not p:
             continue
         cmd = p['pane_current_command']
         if cmd in SHELLS:
             continue
         if not (p['@claude-session'] or cmd == 'claude' or re.fullmatch(r'\d+\.\d+\.\d+', cmd)):
             continue
-        p['state'] = p['@agent-pane-state'] or p['@agent-state']
-        p['at'] = int(p['@agent-pane-at']) if p['@agent-pane-at'].isdigit() else 0
         rows.append(p)
     rows.sort(key=lambda p: (STATES.get(p['state'], UNKNOWN)[0], -p['at']))
     return rows
+
+
+def parse(line):
+    p = dict(zip(FIELDS, line.split('\t')))
+    if len(p) < len(FIELDS):
+        return None
+    p['state'] = p['@agent-pane-state'] or p['@agent-state']
+    p['at'] = int(p['@agent-pane-at']) if p['@agent-pane-at'].isdigit() else 0
+    return p
+
+
+def coordinator():
+    """协调者的窗格，没开着就是 None。"""
+    try:
+        with open(COORD_CONF) as f:
+            m = re.search(r'^COORD_NAME=["\']?([^"\'\n]+)', f.read(), re.M)
+    except OSError:
+        return None
+    if not m:
+        return None
+    out = tmux('list-panes', '-a', '-F', '\t'.join('#{%s}' % f for f in FIELDS))
+    for line in out.splitlines():
+        p = parse(line)
+        if not p or title(p) != m.group(1):
+            continue
+        # 标题会留在退出后的 shell 上；只认终端上还跑着 coordinator 的
+        ps = subprocess.run(['ps', '-o', 'command=', '-t', p['pane_tty'].removeprefix('/dev/')],
+                            capture_output=True, text=True, timeout=2).stdout
+        if 'bin/coordinator' in ps:
+            p['coord'] = True
+            return p
+    return None
 
 
 def where(p):
@@ -147,6 +183,9 @@ def age(at, now):
 
 def cmd_list():
     rows, cache, now = agents(), {}, int(time.time())
+    coord = coordinator()
+    if coord:
+        rows = [coord] + [p for p in rows if p['pane_id'] != coord['pane_id']]
     if not rows:
         return
     cells = [(where(p), os.path.basename(p['pane_current_path']) or '/',
@@ -155,7 +194,7 @@ def cmd_list():
     w_dir = min(20, max(width(c[1]) for c in cells))
     w_br = min(24, max(width(c[2]) for c in cells))
     for p, (loc, folder, br, ago) in zip(rows, cells):
-        _, label, color = STATES.get(p['state'], UNKNOWN)
+        _, label, color = COORD if p.get('coord') else STATES.get(p['state'], UNKNOWN)
         print(f"{p['pane_id']}\t{color}● {label}{RESET}  {fit(loc, w_loc)}  {fit(folder, w_dir)}  "
               f"{DIM}{fit(br, w_br)}{RESET}  {DIM}{ago:>3}{RESET}  {title(p)}")
 
@@ -183,7 +222,7 @@ def cmd_pick(client):
         # --height / --border 盖掉 FZF_DEFAULT_OPTS 里的 40% 和圆角框：弹窗本身就有框，要占满它
         ['fzf', '--height=100%', '--border=none',
          '--ansi', '--layout=reverse', '--delimiter=\t', '--with-nth=2..',
-         '--prompt=agent › ', '--header=回车跳过去 · Ctrl-R 刷新 · Esc 或 Alt+g 关闭',
+         '--prompt=agent › ', '--header=回车跳过去（第一行是协调者） · Ctrl-R 刷新 · Esc 或 Alt+g 关闭',
          f'--preview={SELF} preview {{1}}', '--preview-window=down,60%,border-top,follow',
          f'--bind=ctrl-r:reload({SELF} list)', '--bind=alt-g:abort'],
         input=rows, stdout=subprocess.PIPE, text=True).stdout
