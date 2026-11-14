@@ -52,6 +52,9 @@ else
     [ -r "$f" ] && { gpu=$(cat "$f"); break; }
   done
 fi
+# 只认纯数字：nvidia-smi 出错时把报错印在 stdout（比如驱动升级后没重启的
+# "Failed to initialize NVML: Driver/library version mismatch"），不过滤会整句印进状态栏（2026-11-13）
+case $gpu in ''|*[!0-9]*) gpu="" ;; esac
 
 # ── 输出：>70% 黄，>90% 红 ────────────────────────────────
 col() { if [ "$1" -ge 90 ]; then echo colour1; elif [ "$1" -ge 70 ]; then echo colour3; else echo colour7; fi; }
