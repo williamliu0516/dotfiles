@@ -43,7 +43,7 @@ resize-overlay = never
 # custom-shader-animation = true
 
 # ===== 行为 =====
-shell-integration-features = no-cursor,no-sudo,title
+shell-integration-features = no-cursor,no-sudo,title,ssh-terminfo,ssh-env
 bell-features = no-system,no-audio,no-attention,no-title,no-border
 clipboard-read = allow
 clipboard-write = allow
