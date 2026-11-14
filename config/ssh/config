@@ -5,5 +5,8 @@ Include ~/.ssh/config.local
 Host github.com
   HostName github.com
   User git
+  # 两个名字都列上，ssh 按顺序挨个试：有的机器叫 id_ed25519_github，有的直接用 id_ed25519。
+  # 本机还有别的名字就写进 ~/.ssh/config.local（它先被 Include，会排在最前面先试）
   IdentityFile ~/.ssh/id_ed25519_github
+  IdentityFile ~/.ssh/id_ed25519
   IdentitiesOnly yes

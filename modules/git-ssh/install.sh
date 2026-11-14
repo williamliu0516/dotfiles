@@ -20,4 +20,16 @@ if [ -f "$CFG" ] && [ ! -L "$CFG" ] && [ ! -e "$CFG.local" ]; then
   warn "原来的 ~/.ssh/config 挪成了 ~/.ssh/config.local，主机别名照常可用"
 fi
 link "$DOTFILES/config/ssh/config" "$CFG"
-ls "$HOME"/.ssh/id_* >/dev/null 2>&1 || warn "~/.ssh 里还没有密钥，从别的机器拷过来（id_ed25519_github 等）"
+# 配置里给 github.com 写的密钥，至少要有一把真的在本机，否则 git push 会报 Permission denied
+gh_keys=$(ssh -G github.com 2>/dev/null | awk 'tolower($1) == "identityfile" { print $2 }')
+gh_found=""
+for k in $gh_keys; do
+  case "$k" in "~/"*) k="$HOME/${k#\~/}" ;; esac
+  if [ -f "$k" ]; then gh_found="$k"; break; fi
+done
+if [ -n "$gh_found" ]; then
+  ok "GitHub 用的密钥：$gh_found"
+else
+  warn "github.com 配置的密钥本机一个都没有：$(echo $gh_keys | tr '\n' ' ')"
+  warn "  把密钥拷过来，或在 ~/.ssh/config.local 里加：Host github.com / IdentityFile ~/.ssh/<你的密钥>"
+fi
